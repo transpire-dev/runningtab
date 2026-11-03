@@ -20,6 +20,7 @@ import pathlib
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import typer.rich_utils
 from icedcoffee_sync.frappe.client import SiteConfig
 
 from runningtab import cli
@@ -54,6 +55,21 @@ def _example_books(monkeypatch):
     """
     if not os.environ.get("RUNNINGTAB_LIVE"):
         monkeypatch.setenv(BOOKS_ENV, str(EXAMPLE_BOOKS_DIR))
+
+
+@pytest.fixture(autouse=True)
+def _plain_cli_output(monkeypatch):
+    """Make the CLI's help and errors plain text under CliRunner, wherever the suite runs.
+
+    Typer decides at import time to force a colour terminal when GITHUB_ACTIONS,
+    FORCE_COLOR or PY_COLORS is set, and Rich honours FORCE_COLOR itself. Under
+    either, escape codes split the words tests look for ("--books" no longer
+    appears in the output), so the suite passed on a workstation and failed on
+    Actions. None restores Typer's own detection, which finds no terminal here.
+    """
+    monkeypatch.setattr(typer.rich_utils, "FORCE_TERMINAL", None)
+    for name in ("FORCE_COLOR", "PY_COLORS"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def live_books() -> Books:
