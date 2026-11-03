@@ -1,0 +1,54 @@
+# An example books directory: the one runningtab's own test suite runs
+# against. Every host, secret, project, bucket and account id here is made up.
+#
+# Point runningtab at a books directory with `--books DIR` or
+# `RUNNINGTAB_BOOKS=DIR`. There is no default. Every key below is required,
+# and an unknown key is refused by name.
+
+# Names the books in the period package's manifest, and namespaces the
+# Mercury ingest's local state. Letters, digits, '-' and '_' only.
+name = "Example"
+
+# The page whose account tables `runningtab chart render-doc` regenerates,
+# relative to this directory.
+chart_doc = "chart-of-accounts.md"
+
+[site]
+# The ledger's host. Its credentials come from Secret Manager only.
+host = "ledger.example"
+# Every host `--target test` may point at. Must not name the ledger's host.
+test_hosts = ["test-ledger.example"]
+
+# Secret Manager secret IDs in `project`, not credentials.
+[secrets]
+project = "example-project"
+# The bot's key: the one that changes the ledger.
+books = "example-ledger-bot-key"
+# The reader's key, which the server refuses every write for.
+books_readonly = "example-ledger-reader-key"
+# A read-only Mercury token.
+mercury = "example-mercury-readonly-token"
+# A System Manager key for the test site only.
+test_admin = "example-test-ledger-admin-key"
+
+# Where a closed quarter's package is stored, one bucket per target.
+[record_buckets]
+books = "example-books-record"
+test = "example-books-record-test"
+
+# The identity that drafts and applies.
+[bot]
+role = "Example Books Bot"
+user = "bot@ledger.example"
+first_name = "Books Bot"
+
+# The identity that only reads.
+[reader]
+role = "Example Books Reader"
+user = "reader@ledger.example"
+first_name = "Books Reader"
+
+# A role nobody holds, written as Company's bypass role while proving the
+# close-lock fence. Never "Guest" or "All": every user holds those.
+[fence]
+probe_role = "Example Books Fence Probe"

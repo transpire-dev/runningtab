@@ -1,0 +1,11 @@
+{
+  "accounts": [
+    {
+      "id": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "status": "active",
+      "createdAt": "2026-01-05T00:00:00Z",
+      "availableBalance": 4977.61,
+      "currentBalance": 22.39
+    }
+  ]
+}

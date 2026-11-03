@@ -1,0 +1,38 @@
+[
+  {
+    "advance": 250.0,
+    "credit_note": 0.0,
+    "currency": "USD",
+    "future_amount": 0.0,
+    "invoiced": 1000.0,
+    "outstanding": 750.0,
+    "paid": 0.0,
+    "party": "M\u00fcller, Inc.",
+    "party_type": "Customer",
+    "range1": 100.0,
+    "range2": -250.0,
+    "range3": 0.0,
+    "range4": 0.0,
+    "range5": 900.0,
+    "sales_person": [],
+    "total_due": 750.0
+  },
+  {
+    "advance": 100.0,
+    "credit_note": 0.0,
+    "currency": "USD",
+    "future_amount": 0.0,
+    "invoiced": 1500.0,
+    "outstanding": 800.0,
+    "paid": 600.0,
+    "party": "\"Best\" Bikes",
+    "party_type": "Customer",
+    "range1": -100.0,
+    "range2": 0.0,
+    "range3": 900.0,
+    "range4": 0.0,
+    "range5": 0.0,
+    "sales_person": [],
+    "total_due": 800.0
+  }
+]

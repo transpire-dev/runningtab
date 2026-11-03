@@ -1,0 +1,37 @@
+{
+  "accounts": [
+    {
+      "id": "5f1b2a4c-9d6e-4c2f-8a10-3b7d5e9f1c02",
+      "accountNumber": "204000000001",
+      "routingNumber": "021000021",
+      "name": "Primary Checking",
+      "nickname": null,
+      "status": "active",
+      "type": "mercury",
+      "createdAt": "2026-01-05T00:00:00Z",
+      "availableBalance": 7990.0,
+      "currentBalance": 8000.0,
+      "kind": "checking",
+      "canReceiveTransactions": true,
+      "legalBusinessName": "Transpire LLC",
+      "dashboardLink": "https://mercury.com/accounts/5f1b2a4c-9d6e-4c2f-8a10-3b7d5e9f1c02"
+    },
+    {
+      "id": "7c3e8d21-4f5a-4b6c-9e0d-1a2b3c4d5e6f",
+      "accountNumber": "204000000002",
+      "routingNumber": "021000021",
+      "name": "Savings / Reserve",
+      "nickname": null,
+      "status": "active",
+      "type": "mercury",
+      "createdAt": "2026-01-05T00:00:00Z",
+      "availableBalance": 496.5,
+      "currentBalance": 500.0,
+      "kind": "savings",
+      "canReceiveTransactions": true,
+      "legalBusinessName": "Transpire LLC",
+      "dashboardLink": "https://mercury.com/accounts/7c3e8d21-4f5a-4b6c-9e0d-1a2b3c4d5e6f"
+    }
+  ],
+  "page": {}
+}

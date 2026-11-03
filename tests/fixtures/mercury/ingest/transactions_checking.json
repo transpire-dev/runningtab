@@ -1,0 +1,174 @@
+{
+  "scenario": "transactions_checking",
+  "method": "GET",
+  "path": "/account/acct_chk_1/transactions",
+  "status": 200,
+  "payload": {
+    "total": 8,
+    "transactions": [
+      {
+        "id": "txn_wire_payroll",
+        "amount": -5000.0,
+        "status": "sent",
+        "kind": "outgoingPayment",
+        "createdAt": "2026-08-03T16:04:11.000Z",
+        "postedAt": "2026-08-04T00:00:00.000Z",
+        "counterpartyId": "cp_payroll_provider",
+        "counterpartyName": "Gusto",
+        "bankDescription": "GUSTO PAYROLL",
+        "externalMemo": null,
+        "note": null,
+        "dashboardLink": "https://mercury.com/transactions/txn_wire_payroll",
+        "categoryData": {
+          "customCategory": {
+            "id": "cat_payroll",
+            "name": "5210 - Salaries & Wages"
+          }
+        },
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": [
+          {
+            "amount": -5000.0,
+            "glCodeName": "5210 - Salaries & Wages"
+          }
+        ]
+      },
+      {
+        "id": "txn_ach_utilities",
+        "amount": -100.0,
+        "status": "sent",
+        "kind": "outgoingPayment",
+        "createdAt": "2026-08-05T09:12:00.000Z",
+        "postedAt": "2026-08-06T00:00:00.000Z",
+        "counterpartyId": "cp_isp",
+        "counterpartyName": "Sonic",
+        "bankDescription": "SONIC INTERNET",
+        "externalMemo": null,
+        "note": null,
+        "dashboardLink": "https://mercury.com/transactions/txn_ach_utilities",
+        "trackingNumber": "091000015549612",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": "5215 - Phone & Internet (Verizon, Comcast)",
+        "glAllocations": [
+          {
+            "amount": -100.0,
+            "glCodeName": "5215 - Phone & Internet (Verizon, Comcast)"
+          }
+        ],
+        "attachments": [
+          {
+            "fileName": "sonic-invoice-august.pdf",
+            "url": "https://mercury-attachments.s3.amazonaws.com/attachment/7c2f5a10-3b44-4c5d-9e6f-1a2b3c4d5e6f.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=43200&X-Amz-Signature=0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        ]
+      },
+      {
+        "id": "txn_pending_sub",
+        "amount": -10.0,
+        "status": "pending",
+        "kind": "outgoingPayment",
+        "createdAt": "2026-08-28T18:30:00.000Z",
+        "postedAt": null,
+        "counterpartyId": "cp_saas",
+        "counterpartyName": "Zed Industries",
+        "bankDescription": "ZED IND",
+        "externalMemo": null,
+        "note": null,
+        "dashboardLink": "https://mercury.com/transactions/txn_pending_sub",
+        "categoryData": {
+          "customCategory": {
+            "id": "cat_software",
+            "name": "5204 - Office Software (Microsoft 365 / Slack / 1Password)"
+          }
+        },
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_failed_ach",
+        "amount": -70.0,
+        "status": "failed",
+        "kind": "outgoingPayment",
+        "createdAt": "2026-08-20T11:00:00.000Z",
+        "postedAt": null,
+        "failedAt": "2026-08-20T11:05:00.000Z",
+        "reasonForFailure": "insufficient_funds",
+        "counterpartyId": "cp_vendor_x",
+        "counterpartyName": "Vendor X",
+        "bankDescription": "VENDOR X",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_transfer_out",
+        "amount": -47.61,
+        "status": "sent",
+        "kind": "internalTransfer",
+        "createdAt": "2026-08-12T14:00:00.000Z",
+        "postedAt": "2026-08-12T14:00:00.000Z",
+        "counterpartyId": "acct_chk_2",
+        "counterpartyName": "Transpire Savings",
+        "bankDescription": "TRANSFER TO SAVINGS",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_cc_payment",
+        "amount": -70.0,
+        "status": "sent",
+        "kind": "other",
+        "createdAt": "2026-08-25T08:00:00.000Z",
+        "postedAt": "2026-08-25T08:00:00.000Z",
+        "counterpartyId": "acct_credit_1",
+        "counterpartyName": "Mercury IO",
+        "bankDescription": "CREDIT CARD PAYMENT",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_unmapped_cat",
+        "amount": -250.0,
+        "status": "sent",
+        "kind": "outgoingPayment",
+        "createdAt": "2026-08-18T20:00:00.000Z",
+        "postedAt": "2026-08-19T00:00:00.000Z",
+        "counterpartyId": "cp_venue",
+        "counterpartyName": "Bay Area Venue Co",
+        "bankDescription": "BAY AREA VENUE",
+        "categoryData": {
+          "customCategory": {
+            "id": "cat_offsite",
+            "name": "5216 - Travel / Conferences & Professional Development"
+          }
+        },
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_deposit",
+        "amount": 10000.0,
+        "status": "sent",
+        "kind": "incomingPayment",
+        "createdAt": "2026-08-01T10:00:00.000Z",
+        "postedAt": "2026-08-01T10:00:00.000Z",
+        "counterpartyId": "cp_customer",
+        "counterpartyName": "Acme Bicycles LLC",
+        "bankDescription": "ACME BICYCLES INV 1001",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      }
+    ]
+  }
+}

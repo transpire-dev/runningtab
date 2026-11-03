@@ -1,0 +1,24 @@
+{
+  "name": "tree-sitter-coa",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for runningtab's chart-of-accounts outline (chart.coa)",
+  "main": "bindings/node",
+  "keywords": [
+    "parser",
+    "lexer",
+    "coa"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "tree-sitter-cli": "^0.26.13"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.coa",
+      "file-types": [
+        "coa"
+      ]
+    }
+  ]
+}

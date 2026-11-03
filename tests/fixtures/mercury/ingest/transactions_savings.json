@@ -1,0 +1,26 @@
+{
+  "scenario": "transactions_savings",
+  "method": "GET",
+  "path": "/account/acct_chk_2/transactions",
+  "status": 200,
+  "payload": {
+    "total": 1,
+    "transactions": [
+      {
+        "id": "txn_transfer_in",
+        "amount": 47.61,
+        "status": "sent",
+        "kind": "internalTransfer",
+        "createdAt": "2026-08-12T14:00:00.000Z",
+        "postedAt": "2026-08-12T14:00:00.000Z",
+        "counterpartyId": "acct_chk_1",
+        "counterpartyName": "Transpire Checking",
+        "bankDescription": "TRANSFER FROM CHECKING",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      }
+    ]
+  }
+}

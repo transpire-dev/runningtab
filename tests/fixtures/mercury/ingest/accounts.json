@@ -1,0 +1,26 @@
+{
+  "scenario": "accounts",
+  "method": "GET",
+  "path": "/accounts",
+  "status": 200,
+  "payload": {
+    "accounts": [
+      {
+        "id": "acct_chk_1",
+        "name": "Transpire Checking",
+        "kind": "checking",
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "currentBalance": 4532.39,
+        "availableBalance": 4532.39
+      },
+      {
+        "id": "acct_chk_2",
+        "name": "Transpire Savings",
+        "kind": "savings",
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "currentBalance": 47.61,
+        "availableBalance": 47.61
+      }
+    ]
+  }
+}

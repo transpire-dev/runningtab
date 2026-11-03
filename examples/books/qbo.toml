@@ -1,0 +1,294 @@
+# QuickBooks Online import kit: what QBO cannot infer from chart.coa.
+#
+# Sources (read 2026-09-22):
+#   Account Types (the 15-value list) and the Detail Types grouped under each
+#   one:
+#     https://quickbooks.intuit.com/learn-support/en-us/banking/how-many-types-of-accounts-does-quickbooks-have-how-many-detail/00/790394
+#     https://quickbooks.intuit.com/learn-support/en-us/reports-and-accounting/where-can-i-see-a-complete-list-of-the-account-type-and-detail/00/779890
+#   corroborated against the AccountType / AccountSubType enums in Intuit's
+#   own SDK reference (a second, independently-maintained copy of the same
+#   vocabulary):
+#     https://static.developer.intuit.com/sdkdocs/qbv3doc/ippdotnetdevkitv3/html/fe5d46d7-7629-9de7-1011-2b2c2156cc6b.htm
+#     https://static.developer.intuit.com/sdkdocs/qbv3doc/ippdotnetdevkitv3/html/50796272-b70e-0c9b-77d9-00c18758396c.htm
+#   Built-in account names (Accounts Receivable, Accounts Payable, Retained
+#   Earnings) every QBO company has:
+#     https://quickbooks.intuit.com/learn-support/en-us/help-article/chart-accounts/learn-chart-accounts-quickbooks-online/L2yc6KBob_US_en_US
+#       ("Accounts Payable (A/P): Tracks outstanding bills..." /
+#        "Accounts Receivable (A/R): Tracks transactions for customers...")
+#     https://quickbooks.intuit.com/learn-support/en-us/help-article/chart-accounts/manage-default-special-accounts-chart-accounts/L3WvLaIfa_US_en_US
+#       ("This account reports the net income of your company on the Balance
+#        Sheet report" -- naming it "Retained Earnings")
+#
+# NOT SOURCED -- flagged, not guessed (`period export` needs both):
+#   The journal-entry-import CSV's required columns ARE confirmed from
+#   Intuit -- Journal No., Journal Date, Account Name, Journal/Description,
+#   Debits, Credits --
+#     https://quickbooks.intuit.com/learn-support/en-us/help-article/import-export-data-files/import-journal-entries-quickbooks-online/L4tQBwbs7_US_en_US
+#   but neither the Journal Date format (MM/DD/YYYY vs DD/MM/YYYY vs other)
+#   nor the convention for a line's unused Debits/Credits cell (blank vs "0")
+#   is stated in that article's text, in its UK/CA counterparts, or in any
+#   community thread found. The one concrete fact found -- "Journal entry
+#   lines must only have credits or debits, not both" -- confirms the two
+#   columns are mutually exclusive per line but not which of blank/zero is
+#   expected. Both only appear inside the in-app "Download a sample file"
+#   link, which QBO generates after sign-in and which was not reachable with
+#   WebFetch/WebSearch/curl (curl to the article itself also failed: HTTP/2
+#   stream error, likely bot-blocked). A human with a QBO login needs to open
+#   Settings > Import Data > Journal Entries > Download a sample file and
+#   report back what it contains.
+#
+#   Until that manual check, `period export` uses
+#   ISO `%Y-%m-%d` for Journal Date and leaves the unused Debits/Credits cell
+#   blank. Both are UNVERIFIED against a real QBO import until someone with a
+#   QBO login runs the manual trial-company import above.
+#
+# One entry per postable chart account. `runningtab period export` refuses a chart
+# account with no entry, so a new account cannot quietly drop out of the kit.
+
+# Every QBO Type this file uses, and the Detail Types Intuit lists under it.
+[types]
+"Bank" = ["Cash on hand", "Checking", "Money Market", "Rents held in trust", "Savings", "Trust account"]
+"Other Current Assets" = [
+  "Allowance for Bad Debts",
+  "Development Costs",
+  "Employee Cash Advances",
+  "Inventory",
+  "Investment - Mortgage/Real Estate Loans",
+  "Investment - Tax-exempt Securities",
+  "Investment - U.S. Government Obligations",
+  "Investment - Other",
+  "Loans To Officers",
+  "Loans To Others",
+  "Loans To Stockholders",
+  "Other Current Assets",
+  "Prepaid Expenses",
+  "Retainage",
+  "Undeposited Funds",
+]
+"Other Assets" = [
+  "Accumulated Amortization of Other Assets",
+  "Goodwill",
+  "Lease Buyout",
+  "Licenses",
+  "Organizational Costs",
+  "Other Long-term Assets",
+  "Security Deposits",
+]
+"Fixed Assets" = [
+  "Accumulated Amortization",
+  "Accumulated Depletion",
+  "Accumulated Depreciation",
+  "Buildings",
+  "Depletable Assets",
+  "Fixed Assets Computers",
+  "Fixed Assets Copiers",
+  "Fixed Assets Furniture",
+  "Fixed Assets Other Tools Equipment",
+  "Fixed Assets Phone",
+  "Fixed Assets Photo Video",
+  "Fixed Assets Software",
+  "Furniture & Fixtures",
+  "Intangible Assets",
+  "Land",
+  "Leasehold Improvements",
+  "Machinery & Equipment",
+  "Other fixed assets",
+  "Vehicles",
+]
+"Credit Card" = ["Credit Card"]
+"Other Current Liabilities" = [
+  "Federal Income Tax Payable",
+  "Insurance Payable",
+  "Line of Credit",
+  "Loan Payable",
+  "Other Current Liabilities",
+  "Payroll Clearing",
+  "Payroll Tax Payable",
+  "Prepaid Expenses Payable",
+  "Rents in trust - Liability",
+  "Sales Tax Payable",
+  "State Local Income Tax Payable",
+  "Trust Accounts - Liabilities",
+  "Undistributed Tips",
+]
+"Long Term Liabilities" = ["Notes Payable", "Other Long Term Liabilities", "Shareholder Notes Payable"]
+"Equity" = [
+  "Accumulated Adjustment",
+  "Common Stock",
+  "Estimated Taxes",
+  "Health Insurance Premium",
+  "Health Savings Account Contribution",
+  "Opening Balance Equity",
+  "Owner's Equity",
+  "Paid-In Capital or Surplus",
+  "Partner Contributions",
+  "Partner Distributions",
+  "Partner's Equity",
+  "Personal Expense",
+  "Personal Income",
+  "Preferred Stock",
+  "Retained Earnings",
+  "Treasury Stock",
+]
+"Income" = [
+  "Discounts/Refunds Given",
+  "Non-Profit Income",
+  "Other Primary Income",
+  "Sales of Product Income",
+  "Service/Fee Income",
+  "Unapplied Cash Payment Income",
+]
+"Other Income" = ["Dividend Income", "Interest Earned", "Other Investment Income", "Other Miscellaneous Income", "Tax-Exempt Interest"]
+"Cost of Goods Sold" = [
+  "Cost of labor - COS",
+  "Equipment rental - COS",
+  "Other costs of services - COS",
+  "Shipping, Freight & Delivery - COS",
+  "Supplies & Materials - COGS",
+]
+"Expenses" = [
+  "Advertising/Promotional",
+  "Auto",
+  "Bad Debts",
+  "Bank Charges",
+  "Charitable Contributions",
+  "Communication",
+  "Cost of Labor",
+  "Dues & subscriptions",
+  "Entertainment",
+  "Entertainment Meals",
+  "Equipment Rental",
+  "Finance costs",
+  "Insurance",
+  "Interest Paid",
+  "Legal & Professional Fees",
+  "Office/General Administrative Expenses",
+  "Other Business Expenses",
+  "Other Miscellaneous Service Cost",
+  "Payroll Expenses",
+  "Payroll Tax Expenses",
+  "Payroll Wage Expenses",
+  "Promotional Meals",
+  "Rent or Lease of Buildings",
+  "Repair & Maintenance",
+  "Shipping, Freight & Delivery",
+  "Supplies & Materials",
+  "Taxes Paid",
+  "Travel",
+  "Travel Meals",
+  "Unapplied Cash Bill Payment Expense",
+  "Utilities",
+]
+"Other Expense" = [
+  "Amortization",
+  "Depreciation",
+  "Exchange Gain or Loss",
+  "Gas And Fuel",
+  "Home Office",
+  "Homeowner Rental Insurance",
+  "Mortgage Interest Home Office",
+  "Other Home Office Expenses",
+  "Other Miscellaneous Expense",
+  "Other Vehicle Expenses",
+  "Parking and Tolls",
+  "Penalties & Settlements",
+  "Property Tax Home Office",
+  "Rent and Lease Home Office",
+  "Repairs and Maintenance Home Office",
+  "Utilities Home Office",
+  "Vehicle",
+  "Vehicle Insurance",
+  "Vehicle Lease",
+  "Vehicle Loan",
+  "Vehicle Loan Interest",
+  "Vehicle Registration",
+  "Vehicle Repairs",
+  "Wash and Road Services",
+]
+
+# Our accounts that map onto the account QBO already has, by our number.
+# Their names collide with QBO's own, and QBO treats them specially. `role`
+# is checked against the chart account's own ERPNext account_type/root_type
+# (`validate_qbo_map`) so that this table cannot name the wrong QuickBooks
+# built-in for a chart account -- swap "1131" and "2111" below, say, and the
+# export refuses instead of quietly posting Receivable balances to QBO's
+# Accounts Payable.
+[builtin]
+"1131" = { name = "Accounts Receivable (A/R)", role = "receivable" }
+"2111" = { name = "Accounts Payable (A/P)", role = "payable" }
+"3320" = { name = "Retained Earnings", role = "retained_earnings" }
+
+# The account a voucher with more than one AR or AP line is split through.
+[clearing]
+type = "Other Current Liabilities"
+detail = "Other Current Liabilities"
+
+# number = [Type, Detail Type]
+[accounts]
+# 1000 Assets
+"1111" = ["Bank", "Checking"]                                 # Operating Checking
+"1112" = ["Bank", "Savings"]                                  # Reserve Savings
+"1121" = ["Bank", "Cash on hand"]                             # Petty Cash
+"1141" = ["Other Current Assets", "Prepaid Expenses"]         # Prepaid Expenses
+"1143" = ["Other Current Assets", "Employee Cash Advances"]   # Employee Advances
+"1210" = ["Fixed Assets", "Fixed Assets Computers"]           # Computers & Equipment
+"1220" = ["Fixed Assets", "Vehicles"]                         # Vehicles
+"1230" = ["Fixed Assets", "Accumulated Depreciation"]         # Accumulated Depreciation
+"1310" = ["Other Current Assets", "Other Current Assets"]     # Temporary Opening (Migration)
+
+# 2000 Liabilities
+"2121" = ["Credit Card", "Credit Card"]                                     # Business Credit Card
+"2131" = ["Other Current Liabilities", "Payroll Clearing"]                  # Net Pay Payable
+"2132" = ["Other Current Liabilities", "Payroll Tax Payable"]               # Payroll Taxes Payable
+"2141" = ["Other Current Liabilities", "Sales Tax Payable"]                 # Sales Tax Payable
+"2142" = ["Other Current Liabilities", "State Local Income Tax Payable"]    # State Income & Franchise Tax Payable
+"2151" = ["Other Current Liabilities", "Other Current Liabilities"]        # Accrued Expenses
+"2152" = ["Other Current Liabilities", "Other Current Liabilities"]        # Deferred Revenue
+"2210" = ["Long Term Liabilities", "Notes Payable"]                        # Equipment Loan
+"2220" = ["Long Term Liabilities", "Shareholder Notes Payable"]            # Member Loans
+
+# 3000 Equity
+"3110" = ["Equity", "Partner Contributions"]  # Capital Contribution - Member 1
+"3120" = ["Equity", "Partner Contributions"]  # Capital Contribution - Member 2
+"3130" = ["Equity", "Partner Contributions"]  # Capital Contribution - Member 3
+"3210" = ["Equity", "Partner Distributions"]  # Distributions - Member 1
+"3220" = ["Equity", "Partner Distributions"]  # Distributions - Member 2
+"3230" = ["Equity", "Partner Distributions"]  # Distributions - Member 3
+"3310" = ["Equity", "Opening Balance Equity"] # Opening Balance Equity
+
+# 4000 Revenue / Income
+"4110" = ["Income", "Service/Fee Income"]                   # Project Services Revenue
+"4120" = ["Income", "Service/Fee Income"]                   # Subscription Revenue
+"4130" = ["Income", "Service/Fee Income"]                   # Training & Workshops
+"4140" = ["Income", "Sales of Product Income"]              # Hardware Resale
+"4210" = ["Other Income", "Interest Earned"]                # Interest Income
+"4220" = ["Other Income", "Other Miscellaneous Income"]     # Miscellaneous Income
+
+# 5000 Expenses
+"5110" = ["Cost of Goods Sold", "Other costs of services - COS"]     # Production Hosting
+"5120" = ["Cost of Goods Sold", "Cost of labor - COS"]                # Subcontractors
+"5130" = ["Cost of Goods Sold", "Other costs of services - COS"]      # Messaging & Delivery APIs
+"5140" = ["Cost of Goods Sold", "Supplies & Materials - COGS"]        # Cost of Hardware Sold
+"5150" = ["Expenses", "Office/General Administrative Expenses"]       # Development & Staging Hosting
+"5201" = ["Expenses", "Advertising/Promotional"]                      # Marketing & Events
+"5202" = ["Expenses", "Bank Charges"]                                 # Bank & Payment Processing Fees
+"5203" = ["Other Expense", "Depreciation"]                            # Depreciation Expense
+"5204" = ["Expenses", "Dues & subscriptions"]                         # Office Software
+"5205" = ["Expenses", "Insurance"]                                    # Insurance
+"5206" = ["Expenses", "Legal & Professional Fees"]                    # Legal & Accounting
+"5207" = ["Expenses", "Entertainment Meals"]                          # Meals & Entertainment
+"5208" = ["Expenses", "Office/General Administrative Expenses"]       # Small Equipment under $2,500
+"5209" = ["Expenses", "Rent or Lease of Buildings"]                   # Coworking Space
+"5210" = ["Expenses", "Payroll Wage Expenses"]                        # Salaries & Wages
+"5211" = ["Expenses", "Payroll Tax Expenses"]                         # Employer Payroll Taxes
+"5212" = ["Expenses", "Taxes Paid"]                                   # State Taxes & Annual Fees
+"5215" = ["Expenses", "Utilities"]                                    # Phone & Internet
+"5216" = ["Expenses", "Travel"]                                       # Travel, Training & Conferences
+"5217" = ["Other Expense", "Other Miscellaneous Expense"]             # Round Off Expense
+"5218" = ["Other Expense", "Exchange Gain or Loss"]                   # Foreign Exchange Gain / Loss
+"5219" = ["Expenses", "Dues & subscriptions"]                         # Engineering Tools
+"5220" = ["Expenses", "Bad Debts"]                                    # Write-Offs & Bad Debt
+"5221" = ["Other Expense", "Other Miscellaneous Expense"]             # Gain / Loss on Asset Disposal
+"5222" = ["Expenses", "Auto"]                                         # Vehicle Expenses
+"5223" = ["Expenses", "Interest Paid"]                                # Interest Expense
+"5299" = ["Expenses", "Other Business Expenses"]                      # UNCATEGORISED (needs review)

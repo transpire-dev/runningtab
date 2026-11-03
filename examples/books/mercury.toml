@@ -1,0 +1,51 @@
+# Which chart account and which ERPNext Bank Account each Mercury account is.
+#
+# Read by `runningtab.mercury.mapping`. Account numbers are the ones in `chart.coa`,
+# as strings. Sits beside the chart because it is our data: `icedcoffee-sync` never sees
+# it, and neither would anyone we published the client to.
+#
+# There is no category table. There used to be one, mapping each Mercury
+# category to the expense account a Journal Entry was drafted against; it left
+# on 2026-09-08 when the books moved onto ERPNext's Banking workspace. Bank
+# Statement Import and the Bank Reconciliation Tool work on submitted Bank
+# Transactions, so every settled Mercury transaction now becomes one, on the
+# Bank Account of the account it moved through, and the person reconciling it
+# picks the account. Mercury's GL code and note ride along on the row as hints
+# for that person; they route nothing. The GL code list is still exported from
+# the chart (`runningtab coa export-gl-codes`) so that the codes a bookkeeper sees in
+# Mercury are our account names. A file that reintroduces `[categories]` or
+# `[posting]` is refused rather than read past.
+
+# Mercury account -> the chart account holding its balance. Key on the account
+# id where you have it and on the name Mercury reports otherwise; ids win.
+#
+# `runningtab mercury install-bank-accounts` links each Bank Account below to the
+# chart account named here, so a Bank Transaction on that Bank Account files
+# against the right balance.
+#
+# Three made-up accounts: checking, savings and a card. The
+# credit account is the IO card; its liability side is 2121.
+[accounts]
+"00000000-0000-4000-8000-000000000001" = "1111" # Mercury Checking ••0001
+"00000000-0000-4000-8000-000000000002" = "1112" # Mercury Savings ••0002
+"00000000-0000-4000-8000-000000000003" = "2121" # IO card (credit account)
+
+# Mercury account -> the ERPNext Bank Account document its Bank Transactions
+# attach to. Keyed like [accounts]: id where you have it, name otherwise.
+# ERPNext requires a Bank Account on every Bank Transaction, and the Bank /
+# Bank Account doctypes are outside the chart, so `runningtab mercury
+# install-bank-accounts` creates each one from this table, as an administrator.
+#
+# ERPNext names a Bank Account "<account name> - <bank>", and the bank is
+# "Mercury", so every entry ends in " - Mercury" and the part before it is the
+# account name the installer sends. Each links the chart account [accounts]
+# gives the same Mercury account.
+#
+# One entry per Mercury account, not one setting for all of them: the ingest
+# reads checking, savings and the card, and a savings withdrawal posted against
+# the checking Bank Account is wrong in the ledger and invisible to the
+# reconciliation the doctype exists for. An account with no entry refuses.
+[bank_accounts]
+"00000000-0000-4000-8000-000000000001" = "Mercury Checking - Mercury"
+"00000000-0000-4000-8000-000000000002" = "Mercury Savings - Mercury"
+"00000000-0000-4000-8000-000000000003" = "Mercury IO Card - Mercury"

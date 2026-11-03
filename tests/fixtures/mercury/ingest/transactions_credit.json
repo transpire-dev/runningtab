@@ -1,0 +1,70 @@
+{
+  "scenario": "transactions_credit",
+  "method": "GET",
+  "path": "/account/acct_credit_1/transactions",
+  "status": 200,
+  "payload": {
+    "total": 3,
+    "transactions": [
+      {
+        "id": "txn_card_saas",
+        "amount": -29.0,
+        "status": "sent",
+        "kind": "creditCardTransaction",
+        "createdAt": "2026-08-09T13:22:00.000Z",
+        "postedAt": "2026-08-10T00:00:00.000Z",
+        "counterpartyId": "cp_workspace",
+        "counterpartyName": "Microsoft 365",
+        "bankDescription": "MICROSOFT*365",
+        "dashboardLink": "https://mercury.com/transactions/txn_card_saas",
+        "categoryData": {
+          "customCategory": {
+            "id": "cat_software",
+            "name": "5204 - Office Software (Microsoft 365 / Slack / 1Password)"
+          }
+        },
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": [
+          {
+            "amount": -29.0,
+            "glCodeName": "5204 - Office Software (Microsoft 365, Slack, 1Password)"
+          }
+        ]
+      },
+      {
+        "id": "txn_card_ai",
+        "amount": -200.0,
+        "status": "sent",
+        "kind": "creditCardTransaction",
+        "createdAt": "2026-08-15T19:45:00.000Z",
+        "postedAt": "2026-08-16T00:00:00.000Z",
+        "counterpartyId": "cp_jetbrains",
+        "counterpartyName": "JetBrains",
+        "bankDescription": "JETBRAINS S.R.O.",
+        "dashboardLink": "https://mercury.com/transactions/txn_card_ai",
+        "categoryData": {
+          "customCategory": null,
+          "mercuryCategory": "Research & Development Tools"
+        },
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      },
+      {
+        "id": "txn_cc_payment_in",
+        "amount": 70.0,
+        "status": "sent",
+        "kind": "other",
+        "createdAt": "2026-08-25T08:00:00.000Z",
+        "postedAt": "2026-08-25T08:00:00.000Z",
+        "counterpartyId": "acct_chk_1",
+        "counterpartyName": "Transpire Checking",
+        "bankDescription": "PAYMENT RECEIVED",
+        "categoryData": null,
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      }
+    ]
+  }
+}

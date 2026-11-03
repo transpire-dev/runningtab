@@ -1,0 +1,17 @@
+{
+  "scenario": "credit",
+  "method": "GET",
+  "path": "/credit",
+  "status": 200,
+  "payload": {
+    "accounts": [
+      {
+        "id": "acct_credit_1",
+        "status": "active",
+        "createdAt": "2026-08-01T00:00:00.000Z",
+        "availableBalance": 4841.0,
+        "currentBalance": -159.0
+      }
+    ]
+  }
+}

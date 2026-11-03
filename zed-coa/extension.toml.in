@@ -1,0 +1,24 @@
+id = "coa"
+name = "Chart of Accounts outline"
+version = "0.1.0"
+schema_version = 1
+authors = ["Gavin Carothers <gavin@carothers.name>"]
+description = "Syntax highlighting for runningtab's chart.coa chart-of-accounts outline"
+repository = "https://github.com/transpire-dev/runningtab"
+
+[grammars.coa]
+# Zed's extension docs (https://zed.dev/docs/extensions/languages) document
+# only `repository` + `rev` for [grammars.X] -- no `path` field for pointing
+# at a subdirectory of a larger repository. So `rev` can't name a commit of
+# this repository itself, and the grammar source can't carry its own
+# committed `.git/` either (git would track it as a broken embedded-repo
+# gitlink instead of the actual source files -- see README.md). Instead,
+# `grammar/` stays plain files tracked normally by this repository, and
+# `install-dev.sh` builds the throwaway repo Zed actually needs: it copies
+# `grammar/` into a scratch directory outside this checkout, `git init`s
+# that copy, commits it, and renders this template with the resulting
+# `file://` path and commit SHA -- both of which are specific to the machine
+# and moment `install-dev.sh` ran, which is why this file is a template
+# (`extension.toml.in`) rather than a checked-in `extension.toml`.
+repository = "@GRAMMAR_REPO@"
+rev = "@GRAMMAR_REV@"

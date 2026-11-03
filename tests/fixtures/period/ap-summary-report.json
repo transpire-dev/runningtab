@@ -1,0 +1,20 @@
+[
+  {
+    "advance": 0,
+    "credit_note": 0.0,
+    "currency": "USD",
+    "future_amount": 0.0,
+    "invoiced": 400.0,
+    "outstanding": 400.0,
+    "paid": 0.0,
+    "party": "Cloud Co",
+    "party_type": "Supplier",
+    "range1": 400.0,
+    "range2": 0.0,
+    "range3": 0.0,
+    "range4": 0.0,
+    "range5": 0.0,
+    "sales_person": [],
+    "total_due": 400.0
+  }
+]

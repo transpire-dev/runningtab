@@ -1,0 +1,67 @@
+{
+  "total": 2,
+  "transactions": [
+    {
+      "id": "7c536477-8899-401b-8cdd-eeff00112233",
+      "accountId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "amount": 70.0,
+      "createdAt": "2026-03-02T10:00:00Z",
+      "postedAt": "2026-03-02T10:00:00Z",
+      "estimatedDeliveryDate": "2026-03-02T00:00:00Z",
+      "failedAt": null,
+      "status": "sent",
+      "kind": "other",
+      "counterpartyId": "5f1b2a4c-9d6e-4c2f-8a10-3b7d5e9f1c02",
+      "counterpartyName": "Primary Checking",
+      "counterpartyNickname": null,
+      "bankDescription": "CARD PAYMENT",
+      "note": null,
+      "externalMemo": null,
+      "reasonForFailure": null,
+      "compliantWithReceiptPolicy": true,
+      "hasGeneratedReceipt": false,
+      "dashboardLink": "https://mercury.com/transactions/7c536477-8899-401b-8cdd-eeff00112233",
+      "categoryData": null,
+      "mercuryCategory": null,
+      "generalLedgerCodeName": null,
+      "glAllocations": [],
+      "attachments": [],
+      "relatedTransactions": [],
+      "details": null
+    },
+    {
+      "id": "8d647588-99aa-412c-8dee-ff0011223344",
+      "accountId": "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+      "amount": -47.61,
+      "createdAt": "2026-03-20T19:31:00Z",
+      "postedAt": "2026-03-21T19:31:00Z",
+      "estimatedDeliveryDate": "2026-03-21T00:00:00Z",
+      "failedAt": null,
+      "status": "sent",
+      "kind": "creditCardTransaction",
+      "counterpartyId": "ff660077-1188-4299-83aa-445566778899",
+      "counterpartyName": "GitHub",
+      "counterpartyNickname": null,
+      "bankDescription": "GITHUB INC",
+      "note": null,
+      "externalMemo": null,
+      "reasonForFailure": null,
+      "compliantWithReceiptPolicy": true,
+      "hasGeneratedReceipt": false,
+      "dashboardLink": "https://mercury.com/transactions/8d647588-99aa-412c-8dee-ff0011223344",
+      "categoryData": null,
+      "mercuryCategory": null,
+      "generalLedgerCodeName": null,
+      "glAllocations": [
+        {
+          "glCodeName": "5219 - Engineering Tools (GitHub, JetBrains, Linear)",
+          "amount": -47.61,
+          "description": null
+        }
+      ],
+      "attachments": [],
+      "relatedTransactions": [],
+      "details": null
+    }
+  ]
+}

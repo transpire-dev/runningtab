@@ -1,0 +1,135 @@
+====================
+Root account with a root: tag
+====================
+
+1000 Assets [root: Asset]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list (tag (root_tag value: (identifier))))))
+
+====================
+Nested account with an ERPNext account-type tag
+====================
+
+  1111 Primary Checking Account [Bank]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list (tag (type_tag)))))
+
+====================
+Multi-word account-type tag
+====================
+
+    1230 Accumulated Depreciation [Accumulated Depreciation]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list (tag (type_tag)))))
+
+====================
+Account with no tags at all
+====================
+
+    1141 Prepaid Expenses
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)))
+
+====================
+Note line under an account, indented under the account
+====================
+
+1131 Accounts Receivable [Receivable]
+     > Invoiced work not yet paid.
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list (tag (type_tag))))
+  (note_line))
+
+====================
+Comment line
+====================
+
+# this is a comment
+
+---
+
+(source_file
+  (comment))
+
+====================
+Defaults section
+====================
+
+[defaults]
+default_bank_account = 1111
+
+---
+
+(source_file
+  (section_header name: (identifier))
+  (setting key: (identifier) value: (number)))
+
+====================
+Account with multiple comma-separated tags
+====================
+
+1000 Assets [root: Asset, Fixed Asset]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list
+      (tag (root_tag value: (identifier)))
+      (tag (type_tag)))))
+
+====================
+Account carrying the no-bank-line flag alone
+====================
+
+    5218 Foreign Exchange Gain / Loss [no-bank-line]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list (tag (flag_tag)))))
+
+====================
+Account carrying an account type and the no-bank-line flag
+====================
+
+    5203 Depreciation Expense [Depreciation, no-bank-line]
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)
+    (tag_list
+      (tag (type_tag))
+      (tag (flag_tag)))))
+
+====================
+Account name containing punctuation the format allows (&, /, (), en dash, $, comma)
+====================
+
+5110 Cloud Hosting & Infrastructure (AWS / GCP / Vercel)
+
+---
+
+(source_file
+  (account_line number: (number) name: (account_name)))

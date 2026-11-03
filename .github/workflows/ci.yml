@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  # Fail instead of re-resolving when uv.lock is stale, in every uv command.
+  UV_LOCKED: "1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # .python-version asks for 3.14+gil so uv never picks a free-threaded
+      # build, but uv has no download for a +gil request; installing the
+      # regular 3.14 first gives that request something to find.
+      - run: uv python install 3.14
+      - run: uvx --from rust-just just check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # .python-version asks for 3.14+gil so uv never picks a free-threaded
+      # build, but uv has no download for a +gil request; installing the
+      # regular 3.14 first gives that request something to find.
+      - run: uv python install 3.14
+      - run: uvx --from rust-just just test
+
+  # The .coa grammar for Zed: tree-sitter's corpus tests, plus a parse and the
+  # highlight and outline queries run against examples/books/chart.coa.
+  # tree-sitter-cli's prebuilt binary needs glibc 2.39 and `tree-sitter test`
+  # compiles the parser with cc; ubuntu-latest has both.
+  zed-coa-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uvx --from rust-just just zed-coa-check
+
+  # A push to main publishes <pyproject version>.devN, which pip and uv skip
+  # unless asked for; a v* tag publishes the release itself.
+  publish:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [check, test, zed-coa-check]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Trusted publishing: PyPI exchanges this job's OIDC token for an upload
+      # token, so no PyPI credential is stored anywhere.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # .python-version asks for 3.14+gil so uv never picks a free-threaded
+      # build, but uv has no download for a +gil request; installing the
+      # regular 3.14 first gives that request something to find.
+      - run: uv python install 3.14
+      - name: Stamp the dev version
+        if: github.ref == 'refs/heads/main'
+        # Setting the version rewrites pyproject.toml on purpose, which
+        # UV_LOCKED forbids; --frozen leaves uv.lock untouched instead.
+        run: env -u UV_LOCKED uv version --frozen "$(uv version --short).dev${GITHUB_RUN_NUMBER}"
+      - name: Refuse a tag that is off main or disagrees with pyproject
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(uv version --short)"
+          if [ "$TAG" != "v$version" ]; then
+            echo "Tag $TAG does not match pyproject version v$version" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $TAG points at a commit that is not on main" >&2
+            exit 1
+          fi
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2

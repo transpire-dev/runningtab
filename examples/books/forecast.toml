@@ -1,0 +1,71 @@
+# Expected cash movements, read by `runningtab forecast`. Amounts are what the line
+# costs each month (or year); a range is `low`/`high`. `match` names the Mercury
+# counterparties whose charge is this line, so a charge already made this month
+# is not counted twice. A reimbursed line matches the member it is paid back
+# to: Mercury sends one transfer per charge, for its exact amount, when the
+# charge happens, so the transfer settles the line just as a vendor charge
+# would. A line without `match` is always counted owed.
+#
+# The vendors are real companies picked as examples; the member, the dates and
+# every amount are made up.
+
+[call]
+# Equal thirds across the member capital accounts.
+members = ["3110", "3120", "3130"]
+
+# A fixed monthly charge Mercury pays directly.
+[[line]]
+name = "Linear"
+kind = "expense"
+account = "5219"
+match = ["Linear Orbit"]
+cadence = "monthly"
+day = 17
+amount = 96
+paid = "mercury"
+
+# Usage-based, so a range.
+[[line]]
+name = "AWS"
+kind = "expense"
+account = "5110"
+match = ["Amazon Web Services"]
+cadence = "monthly"
+day = 2
+low = 310
+high = 540
+paid = "mercury"
+
+# Paid on a member's card and reimbursed from Mercury, so it matches the
+# member the reimbursement goes to.
+[[line]]
+name = "Microsoft 365"
+kind = "expense"
+account = "5204"
+cadence = "monthly"
+day = 6
+amount = 66
+paid = "reimbursed"
+match = ["Dana Whitfield"]
+
+# A monthly premium.
+[[line]]
+name = "Next Insurance"
+kind = "expense"
+account = "5205"
+match = ["Next Insurance"]
+cadence = "monthly"
+day = 6
+amount = 41.75
+paid = "mercury"
+
+# Annual invoice.
+[[line]]
+name = "GitHub"
+kind = "expense"
+account = "5219"
+match = ["GitHub"]
+cadence = "yearly"
+on = 2027-04-29
+amount = 252.00
+paid = "mercury"

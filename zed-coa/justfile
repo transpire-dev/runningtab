@@ -1,0 +1,37 @@
+set dotenv-load := false
+
+# Install tree-sitter-cli exactly as grammar/package-lock.json resolved it --
+# `npm ci`, not `npx --yes tree-sitter-cli@<version>`, which re-resolves
+# against the registry on every run with nothing pinning whatever a bare
+# semver range pulls in underneath it.
+install:
+    cd grammar && npm ci
+
+# Regenerate the parser from grammar.js into grammar/src/ (git-ignored;
+# safe to generate directly in the checkout). `npx tree-sitter` resolves the
+# `tree-sitter` bin `install` just put in grammar/node_modules/.bin/ -- no
+# registry lookup, no `--yes`.
+generate: install
+    cd grammar && npx tree-sitter generate
+
+# Run test/corpus/chart.txt, and confirm the example chart.coa still parses
+# with zero ERROR/MISSING nodes. This is what README.md's "What's actually
+# verified" section describes running manually -- wired up here so a
+# grammar change that breaks parsing or highlighting fails a check
+# automatically instead of only when someone happens to run it by hand.
+test: generate
+    cd grammar && npx tree-sitter test
+    cd grammar && npx tree-sitter parse --quiet --stat ../../examples/books/chart.coa
+
+# Compile highlights.scm and outline.scm against the real grammar and
+# confirm each actually captures something in the example chart.coa -- an
+# invalid node name or query pattern fails `tree-sitter query` outright
+# (checked directly: a query naming a bogus node type exits non-zero with
+# "Query compilation failed"), and a query that compiles but matches
+# nothing real would otherwise stay silently broken with `test` alone,
+# since neither query file is exercised by the corpus or the parse check.
+query-check: generate
+    cd grammar && npx tree-sitter query ../languages/coa/highlights.scm ../../examples/books/chart.coa | grep -q "capture:"
+    cd grammar && npx tree-sitter query ../languages/coa/outline.scm ../../examples/books/chart.coa | grep -q "capture:"
+
+check: test query-check

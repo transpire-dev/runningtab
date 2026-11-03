@@ -1,0 +1,46 @@
+{
+  "scenario": "categories",
+  "method": "GET",
+  "path": "/categories",
+  "status": 200,
+  "payload": {
+    "categories": [
+      {
+        "id": "3f1c6b20-0000-4000-8000-000000000001",
+        "name": "Payroll",
+        "visibleForCardSpend": false,
+        "visibleForReimbursements": false,
+        "visibleForOther": true
+      },
+      {
+        "id": "3f1c6b20-0000-4000-8000-000000000002",
+        "name": "Software & Subscriptions",
+        "visibleForCardSpend": true,
+        "visibleForReimbursements": true,
+        "visibleForOther": true
+      },
+      {
+        "id": "3f1c6b20-0000-4000-8000-000000000003",
+        "name": "Office Supplies & Equipment",
+        "visibleForCardSpend": true,
+        "visibleForReimbursements": true,
+        "visibleForOther": true
+      },
+      {
+        "id": "3f1c6b20-0000-4000-8000-000000000004",
+        "name": "5299 - UNCATEGORISED (needs review)",
+        "visibleForCardSpend": true,
+        "visibleForReimbursements": true,
+        "visibleForOther": true
+      },
+      {
+        "id": "3f1c6b20-0000-4000-8000-000000000005",
+        "name": "4210 - Interest Income",
+        "visibleForCardSpend": true,
+        "visibleForReimbursements": false,
+        "visibleForOther": true
+      }
+    ],
+    "page": {}
+  }
+}

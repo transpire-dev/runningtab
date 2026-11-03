@@ -1,0 +1,32 @@
+{
+  "scenario": "transaction_reversed",
+  "method": "GET",
+  "path": "/account/acct_chk_1/transactions",
+  "status": 200,
+  "note": "Kept out of the balance fixtures on purpose -- see fixtures/mercury/README.md. Whether a reversed row counts toward `currentBalance` was never observed, and a balance fixture containing one would assert our guess as if it were a measurement.",
+  "payload": {
+    "total": 1,
+    "transactions": [
+      {
+        "id": "txn_reversed_charge",
+        "amount": -15.0,
+        "status": "reversed",
+        "kind": "creditCardTransaction",
+        "createdAt": "2026-08-22T12:00:00.000Z",
+        "postedAt": "2026-08-23T00:00:00.000Z",
+        "counterpartyId": "cp_merchant",
+        "counterpartyName": "Some Merchant",
+        "bankDescription": "SOME MERCHANT",
+        "categoryData": {
+          "customCategory": {
+            "id": "cat_office",
+            "name": "Office Supplies & Equipment"
+          }
+        },
+        "mercuryCategory": null,
+        "generalLedgerCodeName": null,
+        "glAllocations": []
+      }
+    ]
+  }
+}

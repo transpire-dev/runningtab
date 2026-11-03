@@ -1,0 +1,67 @@
+{
+  "scenario": "events",
+  "method": "GET",
+  "path": "/events",
+  "status": 200,
+  "payload": {
+    "events": [
+      {
+        "id": "evt_0001",
+        "resourceType": "transaction",
+        "resourceId": "txn_wire_payroll",
+        "resourceVersion": 1,
+        "operationType": "create",
+        "changedPaths": []
+      },
+      {
+        "id": "evt_0002",
+        "resourceType": "transaction",
+        "resourceId": "txn_wire_payroll",
+        "resourceVersion": 2,
+        "operationType": "update",
+        "changedPaths": [
+          "categoryData.customCategory"
+        ],
+        "previousValues": {
+          "categoryData": null
+        }
+      },
+      {
+        "id": "evt_0003",
+        "resourceType": "transaction",
+        "resourceId": "txn_card_saas",
+        "resourceVersion": 1,
+        "operationType": "create",
+        "changedPaths": []
+      },
+      {
+        "id": "evt_0004",
+        "resourceType": "transaction",
+        "resourceId": "txn_card_saas",
+        "resourceVersion": 1,
+        "operationType": "update",
+        "changedPaths": [
+          "note"
+        ]
+      },
+      {
+        "id": "evt_0005",
+        "resourceType": "transaction",
+        "resourceId": "txn_pending_sub",
+        "resourceVersion": 2,
+        "operationType": "delete",
+        "changedPaths": []
+      },
+      {
+        "id": "evt_0006",
+        "resourceType": "creditAccount",
+        "resourceId": "acct_credit_1",
+        "resourceVersion": 7,
+        "operationType": "update",
+        "changedPaths": [
+          "currentBalance"
+        ]
+      }
+    ]
+  }
+}
