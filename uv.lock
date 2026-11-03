@@ -528,14 +528,14 @@ wheels = [
 
 [[package]]
 name = "icedcoffee-sync"
-version = "0.1.0.dev9"
+version = "0.1.0.dev13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx2" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/6f/ea40c78d1fa9c80aa86c647590876f81860094ed18190cc977bf86160954/icedcoffee_sync-0.1.0.dev9.tar.gz", hash = "sha256:e6f17389bfcf05cb4d3a248a61578e7f49ea82479ee56dea7a473f7de76c73d0", size = 112555, upload-time = "2026-10-31T19:18:30.255Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/f8/806ecc13a317596f0c48824bdc9dd5928ec2d0fb1ebb237bbc6b66ed75be/icedcoffee_sync-0.1.0.dev13.tar.gz", hash = "sha256:0831326af0569141bdd94684a503d6607fdd1363e8a16992b1436c9c0b1576c6", size = 114682, upload-time = "2026-11-03T21:09:32.023Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/dc/0ec3ff365e104aa4bfc3c613905d6784ab98c7243a8b10df9d4c4f599e51/icedcoffee_sync-0.1.0.dev9-py3-none-any.whl", hash = "sha256:3fc212bcafc1efeb3bb5e02b47bf84c43e58390ff25e2f7e1e8c6e8addb038e6", size = 59320, upload-time = "2026-10-31T19:18:28.707Z" },
+    { url = "https://files.pythonhosted.org/packages/66/df/29eee7a5447432f228729370f8e99f0b2a3a7e476391c8dcb2e1be473f64/icedcoffee_sync-0.1.0.dev13-py3-none-any.whl", hash = "sha256:42f03b41519aa67bfa1481a0c741653e8de4b47ee5e8d766238f046fd3c69e05", size = 61117, upload-time = "2026-11-03T21:09:30.676Z" },
 ]
 
 [[package]]
@@ -792,7 +792,7 @@ requires-dist = [
     { name = "google-cloud-secret-manager", specifier = ">=2.20.0" },
     { name = "google-cloud-storage", specifier = ">=2.10.0" },
     { name = "httpx2", specifier = ">=2.0.0" },
-    { name = "icedcoffee-sync", specifier = "==0.1.0.dev9" },
+    { name = "icedcoffee-sync", specifier = "==0.1.0.dev13" },
     { name = "typer", specifier = ">=0.15.0" },
 ]
 
