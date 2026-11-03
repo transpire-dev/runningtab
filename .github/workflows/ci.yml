@@ -9,15 +9,14 @@ on:
 permissions:
   contents: read
 
-env:
-  # CI runs the GIL-enabled 3.14; the package itself only declares
-  # requires-python. No lock is committed, so every run resolves fresh
-  # against what a user installing from PyPI would get.
-  UV_PYTHON: "3.14+gil"
-
+# The Python jobs run the GIL-enabled 3.14 (UV_PYTHON); the package itself
+# only declares requires-python. No lock is committed, so every run resolves
+# fresh against what a user installing from PyPI would get.
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14+gil"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,6 +29,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.14+gil"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,6 +64,8 @@ jobs:
     needs: [check, test, zed-coa-check]
     runs-on: ubuntu-latest
     environment: pypi
+    env:
+      UV_PYTHON: "3.14+gil"
     permissions:
       # Trusted publishing: PyPI exchanges this job's OIDC token for an upload
       # token, so no PyPI credential is stored anywhere.
