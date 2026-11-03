@@ -10,8 +10,10 @@ permissions:
   contents: read
 
 env:
-  # Fail instead of re-resolving when uv.lock is stale, in every uv command.
-  UV_LOCKED: "1"
+  # CI runs the GIL-enabled 3.14; the package itself only declares
+  # requires-python. No lock is committed, so every run resolves fresh
+  # against what a user installing from PyPI would get.
+  UV_PYTHON: "3.14+gil"
 
 jobs:
   check:
@@ -21,9 +23,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      # .python-version asks for 3.14+gil so uv never picks a free-threaded
-      # build, but uv has no download for a +gil request; installing the
-      # regular 3.14 first gives that request something to find.
+      # uv has no download for a +gil request; installing the regular 3.14
+      # first gives UV_PYTHON something to find.
       - run: uv python install 3.14
       - run: uvx --from rust-just just check
 
@@ -34,9 +35,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      # .python-version asks for 3.14+gil so uv never picks a free-threaded
-      # build, but uv has no download for a +gil request; installing the
-      # regular 3.14 first gives that request something to find.
+      # uv has no download for a +gil request; installing the regular 3.14
+      # first gives UV_PYTHON something to find.
       - run: uv python install 3.14
       - run: uvx --from rust-just just test
 
@@ -73,15 +73,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      # .python-version asks for 3.14+gil so uv never picks a free-threaded
-      # build, but uv has no download for a +gil request; installing the
-      # regular 3.14 first gives that request something to find.
+      # uv has no download for a +gil request; installing the regular 3.14
+      # first gives UV_PYTHON something to find.
       - run: uv python install 3.14
       - name: Stamp the dev version
         if: github.ref == 'refs/heads/main'
-        # Setting the version rewrites pyproject.toml on purpose, which
-        # UV_LOCKED forbids; --frozen leaves uv.lock untouched instead.
-        run: env -u UV_LOCKED uv version --frozen "$(uv version --short).dev${GITHUB_RUN_NUMBER}"
+        # --frozen rewrites only pyproject.toml, without locking or syncing.
+        run: uv version --frozen "$(uv version --short).dev${GITHUB_RUN_NUMBER}"
       - name: Refuse a tag that is off main or disagrees with pyproject
         if: startsWith(github.ref, 'refs/tags/v')
         env:

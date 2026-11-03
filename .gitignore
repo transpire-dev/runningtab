@@ -12,3 +12,6 @@ report.xml
 zed-coa/grammar/src/
 node_modules
 .kata.local.toml
+# A package resolves against what its users get, so neither is committed.
+uv.lock
+.python-version

@@ -8,14 +8,6 @@ default:
 install:
     uv sync
 
-# Install dependencies exactly as locked (CI)
-install-ci:
-    uv sync --frozen
-
-# Check lock file consistency
-lock-check:
-    uv lock --locked
-
 # Lint (check-only, CI-safe)
 lint:
     uv run ruff check --no-fix .
@@ -38,8 +30,8 @@ deps:
 test *args:
     uv run pytest -m "not live_runningtab" {{args}}
 
-# Full static validation: lock, lint, typecheck, deps
-check: lock-check lint typecheck deps
+# Full static validation: lint, typecheck, deps
+check: lint typecheck deps
 
 # Check the Zed grammar parses and highlights examples/books/chart.coa (needs Node.js and a C compiler)
 zed-coa-check:
