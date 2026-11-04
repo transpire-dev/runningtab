@@ -8,10 +8,10 @@ that looks fine and is wrong, and none of them raises anything. This module is
 the thing that looks.
 
 Everything here returns data; `runningtab.cli` prints it and picks the exit code.
-Three of the six checks run today. The other three need the Mercury ingest and
-a token for a real Mercury account, and they say so rather than passing
-vacuously -- a check that reports success because it did not run is worse than
-no check at all.
+Five of the six checks run today. Webhook health needs a webhook the ingest has
+not registered, and the cursor check needs the ingest's state on the machine
+running the report; each says so rather than passing vacuously -- a check that
+reports success because it did not run is worse than no check at all.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import enum
+import pathlib
 import textwrap
 import tomllib
 from collections.abc import Callable, Iterable, Sequence
@@ -34,10 +35,11 @@ from icedcoffee_sync.frappe.errors import FrappeError
 from runningtab.chart import ChartError
 from runningtab.coa import NoSoleCompanyError
 from runningtab.mercury.client import MercuryError
-from runningtab.mercury.ingest import BalanceCheck
+from runningtab.mercury.ingest import BalanceCheck, uncoded_ages
 from runningtab.mercury.ingest import reconcile as account_balance
 from runningtab.mercury.mapping import MappingError
 from runningtab.mercury.models import Account, CreditAccount, Status, Transaction
+from runningtab.mercury.state import RETENTION, Cursor
 from runningtab.period import PeriodError
 from runningtab.site import SiteCredentialError
 
@@ -49,6 +51,16 @@ from runningtab.site import SiteCredentialError
 # this report says out loud that it saw one. Absorbing an unmeasured status
 # silently is how a real discrepancy gets explained away.
 MEASURED_STATUSES: frozenset[Status] = frozenset({Status.SENT, Status.PENDING, Status.FAILED})
+
+# How old an uncoded settled row may be before the report fails. A fortnight:
+# a row coded within the working week after it settles is the normal state of
+# the books, and one still uncoded two weeks on has been forgotten.
+UNCODED_LIMIT_DAYS = 14
+
+# How long since the ingest last caught up with the event log before the
+# report fails. A week: long enough for a sync run by hand on a weekly rhythm,
+# and still far inside the 90 days after which the log cannot be resumed.
+CURSOR_LIMIT_DAYS = 7
 
 
 class Outcome(enum.StrEnum):
@@ -80,10 +92,11 @@ class Check:
 def exit_code(checks: Sequence[Check], *, strict: bool) -> int:
     """0 only when nothing is out of bounds.
 
-    A skipped check is not a failure by default: three of the five cannot run
-    until the ingest exists, and a command that always exits 1 gets wired to
-    nothing. `--strict` is for the day the ingest lands, when a skip means a
-    regression rather than a known gap.
+    A skipped check is not a failure by default: webhook health cannot run
+    until a webhook is registered, and the cursor check cannot run where the
+    ingest has no state, such as CI; a command that always exits 1 there gets
+    wired to nothing. `--strict` is for a machine that runs the ingest, where
+    a skip means a regression rather than a known gap.
     """
     if any(check.outcome in (Outcome.FAIL, Outcome.ERROR) for check in checks):
         return 1
@@ -464,21 +477,96 @@ def suspense_account_name(number: str, name: str, abbr: str) -> str:
 # --- the report -----------------------------------------------------------
 
 
-def uncoded_spend_placeholder() -> Check:
+def _days(count: int) -> str:
+    return f"{count} day" if count == 1 else f"{count} days"
+
+
+def uncoded_spend(ledgers: Sequence[AccountLedger], now: dt.datetime, *, limit_days: int = UNCODED_LIMIT_DAYS) -> Check:
     """Settled, non-transfer transactions carrying no GL code at Mercury, aged by days since posting.
 
     The GL code is the one hint the person reconciling a Bank Transaction gets
     about which account it belongs in; a row without one has to be coded
-    somewhere. `runningtab mercury snapshot`/`sync` report these per run as
-    `uncoded`; this section has nothing persisted to read them from between
-    runs.
+    somewhere. Computed from the same read the balance invariant makes, by the
+    same rule the ingest's own `uncoded` line uses, so the two never disagree
+    about which rows they mean. A row uncoded for less than `limit_days` is a
+    working week, not a lapse, and passes; the count still shows.
     """
-    return skipped(
-        "uncoded-spend",
-        "uncoded spend, aged",
-        "needs the ingest's read of the bank: `runningtab mercury sync` reports these rows per run as `uncoded`, "
-        "and this section has nothing persisted to read them from between runs",
+    rows = uncoded_ages(
+        [transaction for ledger in ledgers for transaction in ledger.transactions],
+        now,
+        own_account_ids=[ledger.account_id for ledger in ledgers],
     )
+    if not rows:
+        return Check(
+            key="uncoded-spend",
+            title="uncoded spend, aged",
+            outcome=Outcome.PASS,
+            summary="every settled row carries a GL code",
+        )
+    late = [(transaction_id, age) for transaction_id, age in rows if age > limit_days]
+    if not late:
+        noun = "row" if len(rows) == 1 else "rows"
+        return Check(
+            key="uncoded-spend",
+            title="uncoded spend, aged",
+            outcome=Outcome.PASS,
+            summary=f"{len(rows)} uncoded {noun}, none older than {_days(limit_days)}",
+        )
+    return Check(
+        key="uncoded-spend",
+        title="uncoded spend, aged",
+        outcome=Outcome.FAIL,
+        summary=f"{len(late)} of {len(rows)} uncoded rows are older than {_days(limit_days)}",
+        detail=tuple(f"  {transaction_id}  {age}d" for transaction_id, age in late),
+    )
+
+
+def event_cursor_age(cursor: Cursor | None, now: dt.datetime, *, limit_days: int = CURSOR_LIMIT_DAYS) -> Check:
+    """How long since the ingest last caught up with Mercury's event log.
+
+    `synced_at` moves only when a sync applied everything it read, so a held
+    cursor ages here exactly as an abandoned one does -- both mean the ledger
+    stopped hearing from the bank. Past Mercury's retention the log can no
+    longer be resumed at all, and the fix is a different command.
+    """
+    key, title = "event-cursor-age", "event cursor age"
+    if cursor is None:
+        return Check(
+            key=key,
+            title=title,
+            outcome=Outcome.FAIL,
+            summary="the ingest state holds no cursor",
+            detail=wrapped("run `runningtab mercury snapshot` to establish one"),
+        )
+    age = (now - cursor.synced_at).days
+    if age > RETENTION.days:
+        return Check(
+            key=key,
+            title=title,
+            outcome=Outcome.FAIL,
+            summary=f"last synced {_days(age)} ago, past Mercury's {RETENTION.days}-day retention",
+            detail=wrapped("the log cannot be resumed from here; re-snapshot with `runningtab mercury snapshot`"),
+        )
+    if age > limit_days:
+        return Check(
+            key=key,
+            title=title,
+            outcome=Outcome.FAIL,
+            summary=f"last synced {_days(age)} ago, more than {limit_days}",
+            detail=wrapped("run `runningtab mercury sync`; if it holds again, its ATTENTION lines say why"),
+        )
+    return Check(key=key, title=title, outcome=Outcome.PASS, summary=f"last synced {_days(age)} ago")
+
+
+def no_ingest_state(path: pathlib.Path) -> Check:
+    """The cursor check on a machine where the ingest has never run, such as CI."""
+    check = skipped(
+        "event-cursor-age",
+        "event cursor age",
+        "no ingest state on this machine; the ingest keeps its cursor where `runningtab mercury sync` runs. Looked in:",
+    )
+    # The path on a line of its own: wrapping would break it at a hyphen.
+    return dataclasses.replace(check, detail=(*check.detail, f"  {path}"))
 
 
 def webhook_subscription_placeholder() -> Check:
@@ -487,15 +575,6 @@ def webhook_subscription_placeholder() -> Check:
         "webhook-subscriptions",
         "webhook subscription health",
         "needs the ingest's webhook subscription to exist; there is nothing registered to report the status of",
-    )
-
-
-def event_cursor_placeholder() -> Check:
-    """How long since the event log was last advanced."""
-    return skipped(
-        "event-cursor-age",
-        "event cursor age",
-        "needs the ingest's persisted last-processed event id; nothing writes a cursor yet",
     )
 
 
@@ -606,11 +685,6 @@ def read_ledgers(
     return ledgers
 
 
-def balance_invariant(client: MercuryReader) -> Check:
-    """Read every account and check each one's arithmetic."""
-    return check_balance_invariant(read_ledgers(client))
-
-
 def suspense_contents(client: Any, company: str, account: str, as_of: dt.date) -> Check:
     """What is in the suspense account, and how long it has been there."""
     if not client.list("Account", fields=["name"], filters=[["name", "=", account]], limit=1):
@@ -627,7 +701,7 @@ def suspense_contents(client: Any, company: str, account: str, as_of: dt.date) -
     return check_suspense(suspense_state(entries, as_of), account)
 
 
-def report(balance: Check, suspense: Check, closed_periods: Check) -> list[Check]:
+def report(balance: Check, uncoded: Check, suspense: Check, cursor: Check, closed_periods: Check) -> list[Check]:
     """The six sections, in the one order the report ever prints them.
 
     Assembled here rather than in the CLI so that "all six, always, in this
@@ -637,10 +711,10 @@ def report(balance: Check, suspense: Check, closed_periods: Check) -> list[Check
     """
     return [
         balance,
-        uncoded_spend_placeholder(),
+        uncoded,
         suspense,
         webhook_subscription_placeholder(),
-        event_cursor_placeholder(),
+        cursor,
         closed_periods,
     ]
 
