@@ -34,14 +34,14 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from decimal import Decimal
 
 from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError
 
 from runningtab.mercury.classify import Decision, Route, classify, is_internal_transfer
 from runningtab.mercury.client import MercuryClient
-from runningtab.mercury.models import Event, Operation, Transaction
+from runningtab.mercury.models import Event, Operation, Status, Transaction
 from runningtab.mercury.posting import (
     TRANSACTION_ID_FIELD,
     Ledger,
@@ -112,6 +112,11 @@ class IngestReport:
     attached: list[str] = dataclasses.field(default_factory=list)
     planned: list[str] = dataclasses.field(default_factory=list)
     skipped: list[tuple[str, str]] = dataclasses.field(default_factory=list)
+    # Transactions that failed at Mercury where no account we read could show
+    # them: (transaction id, Mercury's reasonForFailure). Their events are
+    # retired -- a failed transaction moved no money -- and named here so the
+    # retirement is never silent. Not a reason for the exit code.
+    failed: list[tuple[str, str]] = dataclasses.field(default_factory=list)
     attention: list[tuple[str, str]] = dataclasses.field(default_factory=list)
     # A coded row dated on or before Books Closed Through: its Bank
     # Transaction is posted above like any other, but no voucher is drafted.
@@ -342,6 +347,65 @@ def apply_transaction(
     return True
 
 
+def latest_status_events(events: Iterable[Event]) -> dict[str, Event]:
+    """Each transaction's highest-version event that set a status.
+
+    A run sees a transaction's whole recent history at once, and the create
+    event of a transfer that failed a second later says `pending`: deciding
+    from each event alone would hold the cursor on the create while retiring
+    the failure. The latest version is the transaction's state; an event with
+    no version replaces an earlier one, in log order, because it cannot be
+    ordered otherwise.
+    """
+    latest: dict[str, Event] = {}
+    for event in events:
+        if not event.is_transaction or event.status is None:
+            continue
+        held = latest.get(event.resource_id)
+        if (
+            held is None
+            or event.resource_version is None
+            or held.resource_version is None
+            or event.resource_version >= held.resource_version
+        ):
+            latest[event.resource_id] = event
+    return latest
+
+
+def _apply_change(
+    event: Event,
+    transactions: dict[str, Transaction],
+    ctx: PostingContext,
+    ledger: Ledger,
+    report: IngestReport,
+    *,
+    dry_run: bool,
+    latest: Mapping[str, Event],
+) -> bool:
+    """A create or update: post the transaction it names, or say why not. False holds the cursor."""
+    transaction = transactions.get(event.resource_id)
+    if transaction is not None:
+        applied = apply_transaction(transaction, ctx, ledger, report, version=event.resource_version, dry_run=dry_run)
+        # Recorded whether or not it posted: the event path has already
+        # said everything there is to say about this transaction, and the
+        # hint sweep repeating it would only double the report.
+        report.applied_transactions.add(transaction.id)
+        return applied
+    last_word = latest.get(event.resource_id, event)
+    if last_word.status == Status.FAILED:
+        if event.resource_id not in {transaction_id for transaction_id, _ in report.failed}:
+            report.failed.append((event.resource_id, last_word.failure_reason or "no reason given"))
+        return True
+    # Retryable. The absence may be an account we cannot see yet, and
+    # retiring the event would make the transaction unreachable the
+    # moment visibility is fixed -- there is no second event coming.
+    report.attention.append((
+        event.resource_id,
+        "changed at Mercury but absent from the accounts we read; check the account is in [accounts]",
+    ))
+    return False
+
+
 def apply_event(
     event: Event,
     transactions: dict[str, Transaction],
@@ -352,6 +416,7 @@ def apply_event(
     *,
     now: dt.datetime,
     dry_run: bool = False,
+    latest: Mapping[str, Event] | None = None,
 ) -> bool:
     """Apply one event. The single entry point a webhook consumer will call too.
 
@@ -370,6 +435,15 @@ def apply_event(
     comes back False so the caller keeps its cursor behind it. Recording it
     would retire the event permanently while the ledger never received it --
     the one failure a bank feed must not have.
+
+    One exception to "not posted, not seen": a transaction no account shows
+    whose latest event says it **failed**. `latest` maps each transaction to
+    the highest-version event carrying a status (see `latest_status_events`);
+    without it, this event's own status is all there is. A failed transaction
+    moved no money, so nothing will ever post for it, and measured in
+    production it is in no listing and cannot be read by id -- holding the
+    cursor for it would hold it until retention expired the log. Its events
+    are retired and the transaction is named in `report.failed`.
 
     `dry_run` buffers the state writes here rather than leaving that to the
     caller. Handing this a real `IngestState` with `dry_run=True` would
@@ -403,24 +477,7 @@ def apply_event(
         ))
         report.applied_transactions.add(event.resource_id)
     else:
-        transaction = transactions.get(event.resource_id)
-        if transaction is None:
-            # Retryable. The absence may be an account we cannot see yet, and
-            # retiring the event would make the transaction unreachable the
-            # moment visibility is fixed -- there is no second event coming.
-            report.attention.append((
-                event.resource_id,
-                "changed at Mercury but absent from the accounts we read; check the account is in [accounts]",
-            ))
-            applied = False
-        else:
-            applied = apply_transaction(
-                transaction, ctx, ledger, report, version=event.resource_version, dry_run=dry_run
-            )
-            # Recorded whether or not it posted: the event path has already
-            # said everything there is to say about this transaction, and the
-            # hint sweep repeating it would only double the report.
-            report.applied_transactions.add(transaction.id)
+        applied = _apply_change(event, transactions, ctx, ledger, report, dry_run=dry_run, latest=latest or {})
 
     if not applied:
         return False
@@ -694,8 +751,9 @@ def run_sync(
     # cursor stepping over an event whose transaction never reached the ledger.
     last = cursor.event_id
     held = False
+    latest = latest_status_events(events)
     for event in events:
-        applied = apply_event(event, by_id, ctx, ledger, place, report, now=now, dry_run=dry_run)
+        applied = apply_event(event, by_id, ctx, ledger, place, report, now=now, dry_run=dry_run, latest=latest)
         if not applied:
             held = True
         elif not held:

@@ -1678,6 +1678,12 @@ def _print_ledger_outcome(report: IngestReport) -> None:
         for line in report.planned:
             typer.echo(f"  . {line}")
     typer.echo(f"skipped   {len(report.skipped):4}  (not settled)")
+    if report.failed:
+        typer.echo(
+            f"failed    {len(report.failed):4}  (failed at Mercury in an account we cannot read; nothing to post)"
+        )
+        for transaction_id, reason in report.failed:
+            typer.echo(f"  . {transaction_id} {reason}")
 
 
 def _print_coverage(report: IngestReport) -> None:

@@ -132,6 +132,18 @@ def test_the_report_shows_a_broken_balance_rather_than_burying_it(capsys: pytest
     assert report.needs_attention
 
 
+def test_the_report_names_each_failed_transaction_and_why(capsys: pytest.CaptureFixture[str]) -> None:
+    # Retired rather than posted, so it is said once with Mercury's own reason
+    # -- quietly retiring it would be the silence the hold exists to prevent.
+    report = IngestReport(failed=[("txn_f", "not enough funds for a $0.18 transfer")])
+    _print_report(report, SITE)
+    output = capsys.readouterr().out
+    assert "failed       1" in output
+    assert "txn_f not enough funds for a $0.18 transfer" in output
+    assert "ATTENTION" not in output
+    assert not report.needs_attention
+
+
 def test_the_report_names_the_rows_with_no_gl_code(capsys: pytest.CaptureFixture[str]) -> None:
     # A person will have to code these somewhere; the run names them rather
     # than leaving them to be found at reconciliation.

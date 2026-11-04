@@ -224,6 +224,21 @@ def test_events_parse_their_envelope() -> None:
     assert events[5].is_transaction is False
 
 
+def test_an_event_carries_the_status_its_merge_patch_set() -> None:
+    created, failed = [parse_event(row) for row in payload("events_failed_transfer")["events"]]
+    assert created.status == "pending"
+    assert created.failure_reason is None
+    assert failed.status == Status.FAILED
+    assert failed.failure_reason == "Account Cashback doesn't have enough funds to support a $0.18 transfer"
+
+
+def test_an_event_with_no_merge_patch_has_no_status() -> None:
+    # The recorded-shape fixture predates the patch; an event without one says
+    # nothing about status, which is different from saying it is unchanged.
+    events = [parse_event(row) for row in payload("events")["events"]]
+    assert all(e.status is None and e.failure_reason is None for e in events)
+
+
 def test_an_unknown_operation_type_raises_rather_than_being_guessed_at() -> None:
     with pytest.raises(MercuryPayloadError):
         parse_event({"id": "e", "resourceType": "transaction", "resourceId": "t", "operationType": "merged"})

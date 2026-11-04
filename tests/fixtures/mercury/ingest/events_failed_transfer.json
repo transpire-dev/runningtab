@@ -1,0 +1,43 @@
+{
+  "scenario": "events_failed_transfer",
+  "method": "GET",
+  "path": "/events",
+  "status": 200,
+  "payload": {
+    "events": [
+      {
+        "id": "evt_fail_0001",
+        "resourceType": "transaction",
+        "resourceId": "txn_failed_cashback",
+        "resourceVersion": 1,
+        "operationType": "create",
+        "occurredAt": "2026-11-02T01:13:20.958981Z",
+        "changedPaths": ["amount", "estimatedDeliveryDate", "status"],
+        "mergePatch": {
+          "amount": 0.18,
+          "estimatedDeliveryDate": "2026-11-06T22:00:00+00:00",
+          "status": "pending"
+        }
+      },
+      {
+        "id": "evt_fail_0002",
+        "resourceType": "transaction",
+        "resourceId": "txn_failed_cashback",
+        "resourceVersion": 2,
+        "operationType": "update",
+        "occurredAt": "2026-11-02T01:13:20.958981Z",
+        "changedPaths": ["status", "reasonForFailure", "failedAt"],
+        "mergePatch": {
+          "failedAt": "2026-11-02T01:13:20.958981+00:00",
+          "reasonForFailure": "Account Cashback doesn't have enough funds to support a $0.18 transfer",
+          "status": "failed"
+        },
+        "previousValues": {
+          "failedAt": null,
+          "reasonForFailure": null,
+          "status": "pending"
+        }
+      }
+    ]
+  }
+}
