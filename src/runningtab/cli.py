@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import difflib
+import functools
 import getpass
 import hashlib
 import pathlib
@@ -925,10 +926,25 @@ MERCURY_FOR_TARGET: dict[Target, MercuryEnv] = {
 }
 
 
-def _balance_invariant_check(books: Books, target: Target) -> health.Check:
+def _bank_ledgers(books: Books, target: Target) -> list[health.AccountLedger]:
+    """Every Mercury account with every transaction, read once for the checks that share it."""
     config = mercury_config(books.site, MERCURY_FOR_TARGET[target])
     with MercuryClient(config) as client:
-        return health.balance_invariant(client)
+        return health.read_ledgers(client)
+
+
+def _cursor_check(books: Books, target: Target) -> health.Check:
+    """The ingest's cursor for this target, from the state file a sync on this machine keeps.
+
+    Checked for existence first, as `mercury status` does: opening it creates
+    it, and a report must not leave an empty state file behind.
+    """
+    env = MERCURY_FOR_TARGET[target]
+    path = default_state_path(books.name, env.value, target.value)
+    if not path.exists():
+        return health.no_ingest_state(path)
+    with _open_state(books, env, target, path) as ingest_state:
+        return health.event_cursor_age(ingest_state.cursor(), _now())
 
 
 def _suspense_check(books: Books, target: Target, company: str | None) -> health.Check:
@@ -974,11 +990,11 @@ def health_report(
 ) -> None:
     """Say whether the books are actually current, and exit non-zero when they are not.
 
-    Six sections. Three run today. The other three need the Mercury ingest
-    and a token for a real Mercury account, and report that rather than
-    passing vacuously -- a green report from a check that never ran is the
-    failure mode this command exists to prevent. They count as failures only
-    under `--strict`, which is what to wire up once the ingest lands.
+    Six sections. Webhook health is not available until a webhook is
+    registered, and the cursor check is not available on a machine with no
+    ingest state; both report that rather than passing vacuously -- a green
+    report from a check that never ran is the failure mode this command exists
+    to prevent. They count as failures only under `--strict`.
 
     Reads only. Runs as the reader on the ERPNext side, whose credential the
     server refuses every write for.
@@ -989,9 +1005,15 @@ def health_report(
     typer.echo(f"  mercury: {MERCURY_FOR_TARGET[target].value}")
     typer.echo("")
 
+    # Read on first use and kept: both bank checks need the same read, and a
+    # read that raised is not kept, so the second check reports its own error.
+    bank = functools.cache(lambda: _bank_ledgers(books, target))
+    now = _now()
     checks = health.report(
-        health.guarded("balance-invariant", "balance invariant", lambda: _balance_invariant_check(books, target)),
+        health.guarded("balance-invariant", "balance invariant", lambda: health.check_balance_invariant(bank())),
+        health.guarded("uncoded-spend", "uncoded spend, aged", lambda: health.uncoded_spend(bank(), now)),
         health.guarded("suspense-contents", "suspense contents", lambda: _suspense_check(books, target, company)),
+        health.guarded("event-cursor-age", "event cursor age", lambda: _cursor_check(books, target)),
         health.guarded(
             "closed-periods",
             "closed periods",

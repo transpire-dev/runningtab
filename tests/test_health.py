@@ -19,7 +19,7 @@ from runningtab.health import (
     SuspenseEntry,
     check_balance_invariant,
     check_suspense,
-    event_cursor_placeholder,
+    event_cursor_age,
     exit_code,
     guarded,
     read_suspense_entries,
@@ -32,10 +32,11 @@ from runningtab.health import (
     suspense_state,
     unclassified,
     unclassified_statuses,
-    uncoded_spend_placeholder,
+    uncoded_spend,
     webhook_subscription_placeholder,
 )
 from runningtab.mercury.models import parse_status
+from runningtab.mercury.state import Cursor
 from runningtab.period import PeriodError
 from tests.test_mercury import fixture, parse_accounts, parse_credit_accounts, parse_transactions
 
@@ -369,7 +370,13 @@ def passing(key: str) -> Check:
 
 
 def test_the_report_is_always_six_sections_in_one_order():
-    checks = report(passing("balance-invariant"), passing("suspense-contents"), passing("closed-periods"))
+    checks = report(
+        passing("balance-invariant"),
+        passing("uncoded-spend"),
+        passing("suspense-contents"),
+        passing("event-cursor-age"),
+        passing("closed-periods"),
+    )
 
     assert [c.key for c in checks] == [
         "balance-invariant",
@@ -381,21 +388,84 @@ def test_the_report_is_always_six_sections_in_one_order():
     ]
 
 
-def test_the_three_ingest_dependent_checks_say_what_they_are_waiting_for():
-    for check in (uncoded_spend_placeholder(), webhook_subscription_placeholder(), event_cursor_placeholder()):
-        assert check.outcome is Outcome.SKIP
-        assert check.summary == "not available: needs the Mercury ingest"
-        assert check.detail  # each names its own dependency, not just the generic one
+def test_the_webhook_check_says_what_it_is_waiting_for():
+    check = webhook_subscription_placeholder()
+    assert check.outcome is Outcome.SKIP
+    assert check.summary == "not available: needs the Mercury ingest"
+    assert check.detail  # names its own dependency, not just the generic one
+
+
+# --- uncoded spend ------------------------------------------------------------
+
+# The last posting in the fixtures. On it the three uncoded rows -- settled,
+# not a transfer between our own accounts, no GL code -- are 58, 26 and 10
+# days old.
+FIXTURE_END = dt.datetime(2026, 3, 31, 23, 59, tzinfo=dt.UTC)
+
+
+def test_uncoded_spend_older_than_the_limit_fails_and_is_named_oldest_first():
+    check = uncoded_spend(ledgers(), FIXTURE_END)
+    assert check.outcome is Outcome.FAIL
+    assert check.summary == "2 of 3 uncoded rows are older than 14 days"
+    assert check.detail[0].strip() == "1c9d0e11-2233-4455-8677-889900aabbcc  58d"
+    assert check.detail[1].strip() == "2d0e1f22-3344-4566-8788-99aabbccddee  26d"
+    assert len(check.detail) == 2
+
+
+def test_uncoded_spend_within_the_limit_passes_and_still_says_how_much_there_is():
+    # A row coded within the fortnight is the normal state of a working week,
+    # so it passes; the count still shows, so a growing backlog is visible.
+    # Forty-four days earlier the oldest uncoded row is 14 days old: at the
+    # limit, not past it.
+    check = uncoded_spend(ledgers(), FIXTURE_END - dt.timedelta(days=44))
+    assert check.outcome is Outcome.PASS
+    assert check.summary == "3 uncoded rows, none older than 14 days"
+
+
+def test_no_uncoded_spend_passes():
+    check = uncoded_spend([], FIXTURE_END)
+    assert check.outcome is Outcome.PASS
+    assert check.summary == "every settled row carries a GL code"
+
+
+# --- event cursor age ---------------------------------------------------------
+
+NOW = dt.datetime(2026, 11, 4, 12, 0, tzinfo=dt.UTC)
+
+
+def test_a_recent_cursor_passes():
+    check = event_cursor_age(Cursor("evt_1", NOW - dt.timedelta(days=3)), NOW)
+    assert check.outcome is Outcome.PASS
+    assert check.summary == "last synced 3 days ago"
+
+
+def test_a_cursor_older_than_a_week_fails():
+    # The silent failure this exists for: a sync nobody is running any more.
+    check = event_cursor_age(Cursor("evt_1", NOW - dt.timedelta(days=8)), NOW)
+    assert check.outcome is Outcome.FAIL
+    assert check.summary == "last synced 8 days ago, more than 7"
+
+
+def test_a_cursor_past_retention_fails_and_says_to_re_snapshot():
+    check = event_cursor_age(Cursor("evt_1", NOW - dt.timedelta(days=91)), NOW)
+    assert check.outcome is Outcome.FAIL
+    assert "re-snapshot" in " ".join(check.detail)
+
+
+def test_a_state_file_with_no_cursor_fails():
+    check = event_cursor_age(None, NOW)
+    assert check.outcome is Outcome.FAIL
+    assert check.summary == "the ingest state holds no cursor"
 
 
 def test_a_report_of_passes_and_unavailables_exits_zero():
-    checks = [passing("balance-invariant"), uncoded_spend_placeholder()]
+    checks = [passing("balance-invariant"), webhook_subscription_placeholder()]
 
     assert exit_code(checks, strict=False) == 0
 
 
 def test_strict_makes_an_unavailable_check_a_failure():
-    checks = [passing("balance-invariant"), uncoded_spend_placeholder()]
+    checks = [passing("balance-invariant"), webhook_subscription_placeholder()]
 
     assert exit_code(checks, strict=True) == 1
 
@@ -415,7 +485,7 @@ def test_a_check_that_could_not_run_is_never_suppressed_by_the_default():
 def test_the_rendered_report_counts_every_outcome():
     checks = [
         passing("balance-invariant"),
-        uncoded_spend_placeholder(),
+        webhook_subscription_placeholder(),
         Check(key="k", title="k", outcome=Outcome.FAIL, summary="off"),
     ]
 

@@ -28,6 +28,11 @@ CREDIT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
 
 SUSPENSE = "5299 - UNCATEGORISED (needs review) - VT"
 
+# The report's clock. Fixed, because the fixture transactions are dated early
+# 2026 and the uncoded-spend check ages them: on this day the oldest uncoded
+# fixture row is 10 days old, inside the 14-day limit.
+CLOCK = dt.datetime(2026, 2, 11, 23, 59, tzinfo=dt.UTC)
+
 
 class FakeMercury:
     """Mercury's four read endpoints, answered from the fixtures."""
@@ -134,8 +139,12 @@ class FakeSite:
 
 
 @pytest.fixture
-def wired(monkeypatch):
-    """Point the command at a fake bank and a fake site; return both for assertions."""
+def wired(monkeypatch, tmp_path):
+    """Point the command at a fake bank and a fake site; return both for assertions.
+
+    Also points the ingest's state directory at an empty temporary one, so no
+    test ever reads a real cursor off the machine it runs on.
+    """
 
     def wire(mercury: FakeMercury | None = None, site: FakeSite | None = None) -> tuple[FakeMercury, FakeSite]:
         mercury = mercury or FakeMercury()
@@ -144,6 +153,8 @@ def wired(monkeypatch):
         monkeypatch.setenv("RUNNINGTAB_TEST_KEY", "key")
         monkeypatch.setenv("RUNNINGTAB_TEST_SECRET", "secret")
         monkeypatch.setenv("MERCURY_SANDBOX_TOKEN", "secret-token:sandbox")
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+        monkeypatch.setattr(cli, "_now", lambda: CLOCK)
         monkeypatch.setattr("runningtab.cli.MercuryClient", lambda config: mercury)
         monkeypatch.setattr("runningtab.cli.Client", lambda config: site)
         # `closed periods` reads through the reader's effective-grant check
@@ -195,8 +206,7 @@ def test_a_clean_ledger_and_an_empty_suspense_account_exit_zero(wired) -> None:
     assert result.exit_code == 0, result.output
     assert "3 accounts reconcile exactly" in result.output
     assert "nothing closed yet" in result.output
-    assert "2 passed, 0 failed, 0 could not run, 3 not available" not in result.output
-    assert "3 passed, 0 failed, 0 could not run, 3 not available" in result.output
+    assert "4 passed, 0 failed, 0 could not run, 2 not available" in result.output
 
 
 def test_the_credit_account_is_read_as_well_as_the_deposit_accounts(wired) -> None:
@@ -209,16 +219,17 @@ def test_the_credit_account_is_read_as_well_as_the_deposit_accounts(wired) -> No
     assert set(mercury.asked) == {CHECKING, SAVINGS, CREDIT}
 
 
-def test_the_unavailable_three_do_not_fail_the_command_by_default(wired) -> None:
+def test_the_unavailable_checks_do_not_fail_the_command_by_default(wired) -> None:
+    # The webhook check, and the cursor check on a machine with no ingest state.
     wired()
 
     result = runner.invoke(app, ["health", "--target", "test"])
 
-    assert result.output.count("not available: needs the Mercury ingest") == 3
+    assert result.output.count("not available: needs the Mercury ingest") == 2
     assert result.exit_code == 0
 
 
-def test_strict_fails_on_the_unavailable_three(wired) -> None:
+def test_strict_fails_on_the_unavailable_checks(wired) -> None:
     wired()
 
     result = runner.invoke(app, ["health", "--target", "test", "--strict"])
@@ -340,7 +351,9 @@ def test_a_mercury_response_it_cannot_read_is_reported_not_crashed(wired, monkey
     assert result.exit_code == 1, result.output
     assert "could not run:" in result.output
     assert "/accounts" in result.output
-    assert result.output.count("not available: needs the Mercury ingest") == 3
+    # Both checks that read the bank say so; neither pretends it passed.
+    assert result.output.count("could not run:") == 2
+    assert result.output.count("not available: needs the Mercury ingest") == 2
     assert "suspense contents" in result.output
 
 
@@ -464,3 +477,50 @@ def test_health_has_no_default_target() -> None:
 
     assert result.exit_code != 0
     assert "--target" in result.output
+
+
+def test_uncoded_spend_past_the_limit_fails_the_command(wired, monkeypatch) -> None:
+    wired()
+    monkeypatch.setattr(cli, "_now", lambda: CLOCK + dt.timedelta(days=48))
+
+    result = runner.invoke(app, ["health", "--target", "test"])
+
+    assert result.exit_code == 1, result.output
+    assert "2 of 3 uncoded rows are older than 14 days" in result.output
+
+
+def test_the_bank_is_read_once_for_both_checks_that_need_it(wired) -> None:
+    mercury, _ = wired()
+
+    runner.invoke(app, ["health", "--target", "test"])
+
+    assert sorted(mercury.asked) == sorted([CHECKING, SAVINGS, CREDIT])
+
+
+def test_no_ingest_state_on_this_machine_is_not_available_and_names_where_it_looked(wired, tmp_path) -> None:
+    wired()
+
+    result = runner.invoke(app, ["health", "--target", "test"])
+
+    from runningtab.mercury.state import default_state_path
+
+    expected = default_state_path(EXAMPLE_BOOKS.name, "sandbox", "test")
+    assert expected.is_relative_to(tmp_path)
+    assert "event cursor age" in result.output
+    assert "no ingest state" in result.output
+    assert expected.name in result.output
+
+
+def test_the_cursor_age_comes_from_the_ingest_state(wired, tmp_path) -> None:
+    from runningtab.mercury.state import IngestState, default_state_path
+
+    wired()
+    path = default_state_path(EXAMPLE_BOOKS.name, "sandbox", "test")
+    path.parent.mkdir(parents=True)
+    with IngestState(path, identity="sandbox/test") as state:
+        state.record_cursor("evt_1", CLOCK - dt.timedelta(days=9))
+
+    result = runner.invoke(app, ["health", "--target", "test"])
+
+    assert result.exit_code == 1, result.output
+    assert "last synced 9 days ago, more than 7" in result.output
