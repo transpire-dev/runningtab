@@ -306,11 +306,12 @@ class Operation(enum.StrEnum):
 class Event:
     """One row of the event log, which is also exactly what a webhook delivers.
 
-    The applier reads only the envelope -- which resource changed, at which
-    version -- and re-reads the resource itself from the transactions endpoint.
-    That is deliberate: the event body is a JSON Merge Patch whose exact
-    envelope key the investigation never recorded, and re-reading is both
-    cheaper to be sure of and correct for a pending charge that settled.
+    The applier reads the envelope -- which resource changed, at which
+    version -- and re-reads the resource itself from the transactions endpoint,
+    which is correct for a pending charge that settled without trusting a
+    partial patch. The body is a JSON Merge Patch under `mergePatch` (observed
+    in production, 2026-11-04); only its `status` and `reasonForFailure` are
+    kept, for the one case the re-read cannot answer.
     """
 
     id: str
@@ -319,6 +320,13 @@ class Event:
     operation: Operation
     resource_version: int | None = None
     changed_paths: tuple[str, ...] = ()
+    # From the event's `mergePatch`, when it set one. The applier still
+    # re-reads the transaction; these matter only when the re-read finds
+    # nothing, which a failed transaction does (see `apply_event`). A raw
+    # string rather than `Status`, so a status nobody has classified reads as
+    # itself instead of failing the whole page.
+    status: str | None = None
+    failure_reason: str | None = None
 
     @property
     def is_transaction(self) -> bool:
@@ -529,6 +537,10 @@ def parse_event(payload: dict[str, Any]) -> Event:
     the event id is what makes that safe.
     """
     version = _optional(payload, "resourceVersion")
+    patch = payload.get("mergePatch")
+    patch = patch if isinstance(patch, dict) else {}
+    status = patch.get("status")
+    reason = patch.get("reasonForFailure")
     operation = str(_require(payload, "operationType")).lower()
     try:
         parsed_operation = Operation(operation)
@@ -541,4 +553,6 @@ def parse_event(payload: dict[str, Any]) -> Event:
         operation=parsed_operation,
         resource_version=None if version is None else int(version),
         changed_paths=tuple(payload.get("changedPaths") or ()),
+        status=None if status is None else str(status).lower(),
+        failure_reason=None if reason is None else str(reason),
     )

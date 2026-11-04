@@ -613,6 +613,75 @@ def test_an_event_for_a_transaction_we_cannot_see_is_retryable(ledger, posting_c
     assert "absent from the accounts we read" in dict(report.attention)["txn_invisible"]
 
 
+def _failed_transfer_events() -> list[dict[str, Any]]:
+    return payload("events_failed_transfer")["events"]
+
+
+def test_a_transaction_that_failed_where_we_cannot_see_it_is_retired(ledger, posting_ctx, state) -> None:
+    # Measured in production: a transfer that failed is in no account's
+    # listing and cannot be read by id, so the event is the only evidence.
+    # A failed transaction moved no money, so there is nothing to post and
+    # nothing a fixed account mapping would ever find -- holding the cursor
+    # for it would stall the feed until retention expired it.
+    created, failed = [parse_event(row) for row in _failed_transfer_events()]
+    report = IngestReport()
+    latest = {failed.resource_id: failed}
+    assert apply_event(created, {}, posting_ctx, ledger, state, report, now=NOW, latest=latest) is True
+    assert apply_event(failed, {}, posting_ctx, ledger, state, report, now=NOW, latest=latest) is True
+    assert state.has_seen(created.id) and state.has_seen(failed.id)
+    assert report.attention == []
+    assert report.failed == [
+        ("txn_failed_cashback", "Account Cashback doesn't have enough funds to support a $0.18 transfer")
+    ]
+    assert not report.needs_attention
+
+
+def test_a_missing_transaction_whose_last_word_is_not_failed_still_holds(ledger, posting_ctx, state) -> None:
+    # Pending is not final. The create event alone, with nothing after it,
+    # is exactly the case the hold exists for.
+    created, _ = [parse_event(row) for row in _failed_transfer_events()]
+    report = IngestReport()
+    assert apply_event(created, {}, posting_ctx, ledger, state, report, now=NOW, latest={}) is False
+    assert state.has_seen(created.id) is False
+    assert "absent from the accounts we read" in dict(report.attention)["txn_failed_cashback"]
+
+
+def test_the_latest_version_decides_whether_a_missing_transaction_failed(ledger, posting_ctx, state) -> None:
+    # An earlier failed status that a later version overrides is not the
+    # transaction's state; only the highest resourceVersion is.
+    revived = {
+        "id": "evt_fail_0003",
+        "resourceType": "transaction",
+        "resourceId": "txn_failed_cashback",
+        "resourceVersion": 3,
+        "operationType": "update",
+        "changedPaths": ["status"],
+        "mergePatch": {"status": "pending"},
+    }
+    events = [*payload("events")["events"], *_failed_transfer_events(), revived]
+    bank = _Bank(overrides={"events": {"events": events}})
+    state.record_cursor("evt_0006", NOW)
+    with _mercury_for(bank) as mercury:
+        report = run_sync(mercury, ledger, posting_ctx, state, now=NOW)
+    assert report.failed == []
+    assert report.cursor == "evt_0006"
+    assert state.has_seen("evt_fail_0002") is False
+
+
+def test_a_sync_steps_past_a_transaction_that_failed_out_of_sight(ledger, posting_ctx, state) -> None:
+    bank = _Bank(overrides={"events": {"events": [*payload("events")["events"], *_failed_transfer_events()]}})
+    state.record_cursor("evt_0006", NOW)
+    with _mercury_for(bank) as mercury:
+        report = run_sync(mercury, ledger, posting_ctx, state, now=NOW)
+    assert report.cursor == "evt_fail_0002"
+    assert state.require_resumable(NOW).event_id == "evt_fail_0002"
+    assert [transaction_id for transaction_id, _ in report.failed] == ["txn_failed_cashback"]
+    # The fixture ledger is empty, so the hint sweep rightly names the settled
+    # fixture rows; what matters here is that the failed transfer is not among
+    # the attention items.
+    assert "txn_failed_cashback" not in dict(report.attention)
+
+
 def test_a_held_cursor_does_not_look_freshly_synced(ledger, posting_ctx, state) -> None:
     # Re-stamping a cursor that did not move would make a stuck ingest look
     # caught up forever, and the 90-day retention guard measures from the last
