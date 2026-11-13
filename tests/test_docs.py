@@ -121,3 +121,10 @@ def test_every_command_is_documented() -> None:
     documented = set(_reference_commands())
     missing = [" ".join(path) for path in _leaves(_cli()) if path not in documented]
     assert missing == []
+
+
+def test_readme_links_are_absolute() -> None:
+    """PyPI renders README.md as the project page and resolves no relative link."""
+    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    relative = [target for target in re.findall(r"\]\(([^)\s]+)", readme) if not target.startswith("https://")]
+    assert relative == []
