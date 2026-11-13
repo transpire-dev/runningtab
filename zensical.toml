@@ -53,6 +53,7 @@ nav = [
         { "The books directory" = "reference/books-directory.md" },
         { "Targets and credentials" = "reference/targets-and-credentials.md" },
     ] },
+    { "Contributing" = "contributing.md" },
 ]
 
 [project.theme]
