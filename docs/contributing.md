@@ -121,7 +121,7 @@ just capture-period-fixtures
 
 Zensical builds `docs/` using `zensical.toml`. Preview with `just docs-serve`; validate with `just docs-build`, which fails on any warning. Add pages to the navigation in `zensical.toml`.
 
-`tests/test_docs.py` checks every command and flag in `docs/reference/` against the CLI and verifies that every command is documented. Add a reference entry whenever you add a command or flag.
+`tests/test_docs.py` checks every `runningtab` invocation shown on any page, and every command and flag in `docs/reference/`, against the CLI, and fails when a command has no reference entry. It does not notice a new flag that no page mentions, so add one to the command's reference section when you add it.
 
 The [documentation workflow](https://github.com/transpire-dev/runningtab/blob/main/.github/workflows/docs.yml) publishes GitHub Pages from `main`.
 
@@ -129,6 +129,6 @@ For `chart.coa` syntax highlighting, see the [Zed grammar README](https://github
 
 ## CI and publishing
 
-[CI](https://github.com/transpire-dev/runningtab/blob/main/.github/workflows/ci.yml) runs `check`, `test`, and `zed-coa-check` on every pull request and push.
+[CI](https://github.com/transpire-dev/runningtab/blob/main/.github/workflows/ci.yml) runs `check`, `test`, and `zed-coa-check` on every pull request, on every push to `main`, and on `v*` tags.
 
 A push to `main` publishes `<version>.devN` to PyPI. A `v*` tag on `main` matching the version in `pyproject.toml` publishes the release. Both use trusted publishing, with no stored PyPI credential.

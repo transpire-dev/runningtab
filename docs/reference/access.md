@@ -66,6 +66,8 @@ Check the stored credential against the selected identity’s permission policy.
 | Code | Meaning |
 | --- | --- |
 | `0` | All permission checks passed. |
+| `1` | A permission check failed; the output names the doctype and flag. |
+| `2` | `--target test`, which has no stored key to verify. |
 
 ### Notes
 

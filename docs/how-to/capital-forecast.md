@@ -19,31 +19,27 @@ The combination `--env sandbox --target books` is refused before any request, wi
 
 1. **Install the Cash Forecast doctypes.**
 
-   Using administrator credentials, run:
+   Install them on the test site first, then on the real one. On `--target test` the environment credential (`RUNNINGTAB_TEST_URL`, `RUNNINGTAB_TEST_KEY`, `RUNNINGTAB_TEST_SECRET`) is already an administrator's; on `--target books`, set `RUNNINGTAB_ADMIN_TOKEN` to your own System Manager `key:secret`.
 
    ```sh
+   runningtab forecast install-doctype --target test
    runningtab forecast install-doctype --target books
    ```
 
-   Confirm the prompt. To skip confirmation, add `--yes`.
+   Confirm each prompt, or add `--yes` to skip it.
 
    The command installs four doctypes and prints one outcome per doctype: `created`, `updated`, or `unchanged`. You can rerun it to repair field-list drift; it never deletes a doctype.
 
-2. **Provision the bot’s access.**
+2. **Provision the bot's access.**
 
-   Run `access provision` after installing the doctypes. It grants the bot `read` and `create` on Cash Forecast.
-
-   With `RUNNINGTAB_ADMIN_TOKEN` set, run with `--target test` first:
+   Run `access provision` after installing the doctypes. It grants the bot `read` and `create` on Cash Forecast. Use the same credentials as step 1:
 
    ```sh
    runningtab access provision --target test
-   ```
-
-   Then run for the `books` site:
-
-   ```sh
    runningtab access provision --target books
    ```
+
+   Every run mints a fresh key, so provisioning `books` rotates the bot's stored key; anything holding the old one, such as a scheduled sync, picks up the new one from Secret Manager on its next run. See [Rotate the bot key](rotate-the-bot.md).
 
    Both `access provision` and `access verify` refuse with one sentence and write nothing if the Cash Forecast doctype is missing. See the [access reference](../reference/access.md).
 

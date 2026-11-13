@@ -128,3 +128,82 @@ def test_readme_links_are_absolute() -> None:
     readme = (Path(__file__).parent.parent / "README.md").read_text()
     relative = [target for target in re.findall(r"\]\(([^)\s]+)", readme) if not target.startswith("https://")]
     assert relative == []
+
+
+DOCS = Path(__file__).parent.parent / "docs"
+_COMMAND_LINE = re.compile(r"(?:^|`)\s*(runningtab(?: [^`\n]*)?)")
+
+
+def command_lines(text: str) -> list[str]:
+    """Every `runningtab ...` invocation a page shows: lines of code blocks and inline code spans."""
+    found: list[str] = []
+    in_block = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("```"):
+            in_block = not in_block
+            continue
+        if in_block:
+            stripped = line.strip()
+            if stripped.startswith("runningtab"):
+                found.append(stripped)
+        else:
+            found.extend(
+                span for span in _CODE_SPAN.findall(line) if span.startswith("runningtab ") or span == "runningtab"
+            )
+    return found
+
+
+def invocation_problems(line: str) -> list[str]:
+    """What in one shown invocation the CLI would not accept: an unknown command or an option it does not take."""
+    tokens = line.split()[1:]
+    if tokens[:1] == ["--books"]:
+        tokens = tokens[2:]
+    command = _cli()
+    path: list[str] = []
+    while tokens and (children := _subcommands(command)) is not None and tokens[0] in children:
+        command = children[tokens[0]]
+        path.append(tokens.pop(0))
+    if tokens and _subcommands(command) is not None and not tokens[0].startswith("-"):
+        return [f"{line}: no command {tokens[0]!r} under {' '.join(['runningtab', *path])}"]
+    allowed = _options(command) | {"--help"}
+    return [
+        f"{line}: {' '.join(path)} takes no {flag}" for flag in _FLAG.findall(" ".join(tokens)) if flag not in allowed
+    ]
+
+
+def test_finds_invocations_in_blocks_and_spans() -> None:
+    page = """Run `runningtab coa plan --target test` first.
+
+```sh
+export RUNNINGTAB_BOOKS=my-books
+runningtab --books my-books coa apply --target test --yes
+```
+
+`runningtab.mercury.client` is a module, not a command.
+"""
+    assert command_lines(page) == [
+        "runningtab coa plan --target test",
+        "runningtab --books my-books coa apply --target test --yes",
+    ]
+
+
+def test_invocation_problems_name_what_the_cli_rejects() -> None:
+    assert invocation_problems("runningtab coa plan --target test") == []
+    assert invocation_problems("runningtab --books DIR health --target books --strict") == []
+    assert invocation_problems("runningtab coa plann --target test") == [
+        "runningtab coa plann --target test: no command 'plann' under runningtab coa"
+    ]
+    assert invocation_problems("runningtab access verify --target test --prune") == [
+        "runningtab access verify --target test --prune: access verify takes no --prune"
+    ]
+
+
+def test_every_invocation_on_every_page_is_one_the_cli_accepts() -> None:
+    pages = [page for page in sorted(DOCS.rglob("*.md")) if "superpowers" not in page.parts]
+    problems = [
+        f"{page.relative_to(DOCS)}: {problem}"
+        for page in pages
+        for line in command_lines(page.read_text())
+        for problem in invocation_problems(line)
+    ]
+    assert problems == []

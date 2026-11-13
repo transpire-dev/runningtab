@@ -138,7 +138,7 @@ Reports the saved cursor, its age, and how many events have been applied for the
 
 ### Exit codes
 
-- `1`: The cursor is past the retention window.
+- `1`: There is no state file, the state holds no cursor, or the cursor is past Mercury's 90-day retention window.
 
 ### Notes
 
@@ -162,7 +162,7 @@ Reports differences between Mercury custom categories and the chart’s codeable
 
 ### Exit codes
 
-- `1`: Any category drift remains, including unmanaged categories still in use during a prune check.
+- `1`: Any category drift remains, including unmanaged categories still in use during a prune check, or the plan is refused (for example, two categories share a desired name).
 
 ### Notes
 
@@ -189,7 +189,7 @@ Creates missing chart categories and corrects visibility flags on existing categ
 
 ### Exit codes
 
-- `1`: Unmanaged categories remain in use during pruning.
+- `1`: The token variable is unset, the plan is refused, a write Mercury refuses or that fails, or unmanaged categories remain in use during pruning.
 
 ### Notes
 

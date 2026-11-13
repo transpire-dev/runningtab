@@ -3,7 +3,7 @@
 Every command reads a books directory selected by `--books DIR` or `RUNNINGTAB_BOOKS`. Put `--books` before the command:
 
 ```sh
-runningtab --books DIR coa plan
+runningtab --books DIR coa plan --target test
 ```
 
 The flag takes precedence over the environment variable. Without either, the command refuses and names both ways to select a directory.

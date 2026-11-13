@@ -77,6 +77,20 @@ If the ledger changes between the check and the lock, the refusal names differin
 
 See [close a quarter](../how-to/close-a-quarter.md) and [reopen and re-close](../how-to/reopen-and-reclose.md).
 
+### What blocks a close
+
+`period close` refuses, before it locks anything, while any of these holds. Each refusal names the document or the condition:
+
+- The quarter has not ended yet.
+- An entry dated in the quarter sits in the suspense account (`5299`).
+- A submitted Bank Transaction dated in the quarter is not fully reconciled.
+- A draft Journal Entry or Purchase Invoice is dated in the quarter. That includes drafts the ingest proposed and nobody submitted or deleted: a draft can never be submitted once its quarter is locked.
+- A Mercury account and the ledger disagree at the quarter's end.
+- Books Closed Through is not where this quarter expects it: at the previous quarter's end once an earlier quarter is stored (or at this quarter's end, when recovering a lock whose store failed).
+- A quarter before this one was never stored while a later one is.
+- `role_allowed_for_frozen_entries` is set on the Company.
+- The quarter already has a complete stored package. Reopen it first to close it again.
+
 ## `runningtab period status`
 
 ```text
@@ -113,7 +127,7 @@ Checks report:
 - An unfinished re-close, where a newer Company `Version` sets Books Closed Through to a stored quarter’s end than the version recorded in its stored `MANIFEST.md`. This can be detected even when all package files match.
 - `role_allowed_for_frozen_entries` left set.
 
-Reopening is a manual ERPNext UI action: move Books Closed Through to the previous quarter’s end. There is no `runningtab period reopen` command. Any stored quarter can be reopened. Re-close it, then every later stored quarter in order. Until that sequence is complete, status fails and names the required order.
+Reopening is a manual ERPNext UI action: move Books Closed Through to the previous quarter’s end. There is no `period reopen` command. Any stored quarter can be reopened. Re-close it, then every later stored quarter in order. Until that sequence is complete, status fails and names the required order.
 
 The `closed periods` section of [health](health.md) runs this same report.
 

@@ -17,6 +17,20 @@ Use this guide when you have reconciled a quarter and are ready to lock it and s
 
 Practise with `--target test` first. Its environment credential is already an administrator's, and its packages go to `record_buckets.test`. The Mercury sandbox needs its own account mapping: pass `--mercury-mapping PATH` to each `period` command. The default `mercury.toml` names only real Mercury accounts.
 
+## What blocks a close
+
+`period close` refuses, before it locks anything, while any of these holds. Each refusal names the document or the condition:
+
+- The quarter has not ended yet.
+- An entry dated in the quarter sits in the suspense account (`5299`).
+- A submitted Bank Transaction dated in the quarter is not fully reconciled.
+- A draft Journal Entry or Purchase Invoice is dated in the quarter. That includes drafts the ingest proposed and nobody submitted or deleted: a draft can never be submitted once its quarter is locked.
+- A Mercury account and the ledger disagree at the quarter's end.
+- Books Closed Through is not where this quarter expects it: at the previous quarter's end once an earlier quarter is stored (or at this quarter's end, when recovering a lock whose store failed).
+- A quarter before this one was never stored while a later one is.
+- `role_allowed_for_frozen_entries` is set on the Company.
+- The quarter already has a complete stored package. Reopen it first to close it again.
+
 ## Close the quarter
 
 1. **Reconcile everything in the quarter and run `health`.**
