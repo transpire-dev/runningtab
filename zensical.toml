@@ -23,6 +23,14 @@ edit_uri = "edit/main/docs/"
 # out of the sidebar. New reader-facing pages must be added here.
 nav = [
     { "Home" = "index.md" },
+    { "Tutorial" = "tutorial.md" },
+    { "Explanation" = [
+        { "How it works" = "explanation/how-it-works.md" },
+        { "Why write the chart down" = "explanation/why-a-written-chart.md" },
+        { "Access model" = "explanation/access-model.md" },
+        { "How the ingest decides" = "explanation/how-the-ingest-decides.md" },
+        { "What a close guarantees" = "explanation/what-a-close-guarantees.md" },
+    ] },
 ]
 
 [project.theme]
