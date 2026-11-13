@@ -31,6 +31,17 @@ nav = [
         { "How the ingest decides" = "explanation/how-the-ingest-decides.md" },
         { "What a close guarantees" = "explanation/what-a-close-guarantees.md" },
     ] },
+    { "How-to guides" = [
+        { "Set up a new site" = "how-to/new-site.md" },
+        { "Connect Mercury" = "how-to/connect-mercury.md" },
+        { "Reconcile daily" = "how-to/daily-reconciliation.md" },
+        { "Close a quarter" = "how-to/close-a-quarter.md" },
+        { "Reopen and re-close" = "how-to/reopen-and-reclose.md" },
+        { "Late bank activity" = "how-to/late-bank-activity.md" },
+        { "Run a capital forecast" = "how-to/capital-forecast.md" },
+        { "Rotate the bot key" = "how-to/rotate-the-bot.md" },
+        { "Schedule health checks" = "how-to/scheduled-health.md" },
+    ] },
 ]
 
 [project.theme]
