@@ -49,15 +49,15 @@ The stored `books` bot credential cannot install fields, create Bank Accounts, o
    runningtab coa plan --target test
    ```
 
-   On a fresh ERPNext site, the stock chart collides with your chart. Review the plan, then follow the tutorial’s sequence:
+   On a fresh ERPNext site, the stock chart the setup wizard created collides with your chart. Review the plan, then follow the tutorial's sequence:
 
    ```sh
-   runningtab coa prune --target test --allow-unapplied
+   runningtab coa clear-stock --target test
    runningtab coa apply --target test
    runningtab coa prune --target test
    ```
 
-   Pruning deletes accounts outside your chart. Keep the confirmation prompts and review the proposed changes. `--allow-unapplied` permits retiring the stock chart before application; blocking refusals still apply.
+   `clear-stock` deletes ERPNext's stock chart and refuses while the company's ledger holds any entry, so run it before anything is posted. `prune` then retires whatever ERPNext would not let `clear-stock` delete. Review each prompt.
 
 5. **Install the Mercury custom fields as an administrator.**
 
@@ -98,4 +98,4 @@ If Bank Account installation rejects a name, correct its `[bank_accounts]` entry
 
 If provisioning fails after minting a key, the live secret has already rotated. Read the failure message: it identifies when the stored credential is stale. Follow [Rotate the bot](rotate-the-bot.md) to recover access.
 
-If chart pruning reports `ROOT_NOT_UNIQUE` or `AMBIGUOUS_MATCH`, resolve the blocking refusal before retrying. The [chart tutorial](../tutorial.md) and [chart command reference](../reference/coa.md) cover chart setup.
+If `coa clear-stock` refuses because the ledger has entries, the site is not new: its stock accounts are history, and `coa prune --allow-unapplied` is the teardown for a chart already in use (see the [coa reference](../reference/coa.md)). If chart pruning reports `ROOT_NOT_UNIQUE` or `AMBIGUOUS_MATCH`, resolve the blocking refusal before retrying. The [chart tutorial](../tutorial.md) and [chart command reference](../reference/coa.md) cover chart setup.

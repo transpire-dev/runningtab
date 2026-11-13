@@ -49,6 +49,7 @@ Code lives in [`src/runningtab/`](https://github.com/transpire-dev/runningtab/bl
 - `gl_codes.py` — Produces Mercury’s postable-account CSV.
 - `health.py` — Defines six health checks and their exit-code rule.
 - `site.py` — Resolves ERPNext targets and credentials.
+- `stock_chart.py` — The account names of ERPNext's "Standard" chart, which `coa clear-stock` recognises.
 
 The `mercury/` package handles bank ingestion:
 

@@ -76,6 +76,38 @@ With `--allow-unapplied`, pruning clears Company defaults pointing at accounts i
 
 After this teardown, run `runningtab coa apply`, then `runningtab coa prune` to retire the remaining accounts.
 
+## `runningtab coa clear-stock`
+
+```text
+runningtab coa clear-stock --target <test|books> [--company NAME] [--yes]
+```
+
+Delete ERPNext's stock chart from a site whose ledger is empty, so `runningtab coa apply` can run. A fresh site's setup wizard creates ERPNext's "Standard" chart, and some of it collides with yours in ways `coa apply` refuses to resolve, such as an ungrouped Retained Earnings where the chart wants a group.
+
+### Options
+
+| Option | Required | What it does |
+| --- | --- | --- |
+| `--target` | Yes | Select the site: `test` or `books`. |
+| `--company` | No | Select the Company by name. Defaults to the site's only Company. |
+| `--yes` | No | Skip the confirmation prompt. |
+| `--help` | No | Show help and exit. |
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Every listed account was deleted, or there was nothing to clear. |
+| `1` | The company's ledger holds an entry, the prompt was declined, or ERPNext refused an account. |
+
+### Notes
+
+An account is part of the stock chart when it has no account number, is not a root, and carries a name from ERPNext's "Standard" template (copied into `runningtab.stock_chart` from ERPNext's source). Your chart's accounts always carry a number, so they are never candidates. Accounts are deleted children first; a stock group that holds any other account is kept and listed under `keep`.
+
+Before deleting, the command points every Company default-account field away from the accounts it deletes, and probes the ledger again after the prompt. A refused delete is reported with ERPNext's reason, the run continues, and that account's parent groups are left standing.
+
+On `--target books` it runs as the bot, which holds `delete` on Account.
+
 ## `runningtab coa export-gl-codes`
 
 ```text

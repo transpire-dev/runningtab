@@ -1,8 +1,8 @@
 # Your chart in a test ledger
 
-This tutorial takes you from an example books directory to a chart of accounts applied in a disposable ERPNext site. You will clear the stock chart, apply your chart, check the result in ERPNext, and make one change of your own.
+This tutorial takes you from an example books directory to a chart of accounts applied in a disposable ERPNext site. You will clear ERPNext's stock chart, apply your chart, check the result in ERPNext, and make one change of your own.
 
-Use a site you can wipe. The teardown step deletes or disables accounts from the site's existing chart. You do not need Mercury or Google Cloud for this tutorial.
+Use a site you can wipe. Clearing the stock chart deletes accounts from the site. You do not need Mercury or Google Cloud for this tutorial.
 
 ## Before you start
 
@@ -13,7 +13,7 @@ You need:
 - A disposable ERPNext site with one Company.
 - An API key and secret for an administrator user on that site. In ERPNext, open **User > API Access > Generate Keys**.
 
-For instructions on creating a disposable ERPNext site, see [GAVIN: preferred link for getting a disposable ERPNext site].
+Any ERPNext site you can wipe works, such as a bench on your own machine or a fresh hosted site. Run the setup wizard so the site has its Company.
 
 Keep the site's URL, API key, and API secret available for the environment setup below.
 
@@ -70,24 +70,30 @@ This compares `chart.coa` with the site and describes what would change. It writ
 
 On a fresh ERPNext site, expect refusals and an exit status of `1`. ERPNext's stock chart collides with the example chart on some accounts. For example, the site may have an ungrouped Retained Earnings account where the written chart requires a group.
 
-Read the plan before proceeding. These initial collisions are why this tutorial includes a teardown step.
+Read the plan before proceeding. The next step clears those collisions.
 
-## 5. Clear the stock chart
+## 5. Clear ERPNext's stock chart
 
 !!! warning
-    This step changes the existing chart destructively. Confirm that your configured URL points to the disposable site you can wipe.
+    This step deletes accounts. Confirm that your configured URL points to the disposable site you can wipe.
 
 Run:
 
 ```sh
-runningtab coa prune --target test --allow-unapplied
+runningtab coa clear-stock --target test
 ```
 
-The command prompts before proceeding. Read the prompt and confirm when you are ready. The `--yes` flag skips that prompt.
+`clear-stock` deletes the accounts ERPNext's setup wizard created from its "Standard" chart: unnumbered accounts carrying a name from that template, children first. It never deletes a root, keeps a stock group that holds any account of yours, and first points the Company's default-account fields away from what it deletes. It refuses to run at all while the company's ledger holds a single entry, since those accounts are history once anything is posted.
 
-`prune` deletes accounts the chart does not describe, or disables them where ERPNext refuses deletion. With `--allow-unapplied`, it also clears Company defaults pointing at accounts it deletes and moves surviving accounts that hold chart numbers onto 9-prefixed numbers. This frees those numbers for the chart you are about to apply.
+It lists what it will delete and prompts; `--yes` skips the prompt. It reports `deleted N, failed N`. If ERPNext refuses an account, the command names it and exits `1`, and leaves that account's parent groups standing.
 
-Ordinary pruning requires the chart to be applied first. The `--allow-unapplied` flag provides this teardown path for a pre-existing chart with colliding numbers.
+Run the plan again:
+
+```sh
+runningtab coa plan --target test
+```
+
+Nothing should be listed under `REFUSED` now, and the plan exits `0`. If a refusal remains, it names the account; delete it in ERPNext's **Chart of Accounts** if it has no child accounts.
 
 ## 6. Apply your chart
 
@@ -99,19 +105,19 @@ runningtab coa apply --target test
 
 Review the prompt and confirm. After the prompt, `runningtab` plans again and refuses to proceed if anything changed meanwhile.
 
-The command creates, renumbers, retypes, and re-enables accounts as needed. It then sets the Company's default-account fields to accounts in your chart. Before touching any account, it checks that those default fields exist on Company.
+The command creates, renumbers, retypes, and re-enables accounts as needed, and renames ERPNext's five root accounts into your chart's. It then sets the Company's default-account fields to accounts in your chart. Before touching any account, it checks that those default fields exist on Company.
 
 The result reports the counts of account changes and the Company defaults that were set.
 
-## 7. Retire the remaining accounts
+## 7. Retire anything left over
 
-Now run ordinary pruning:
+If the plan still listed `extra` accounts, such as a stock account ERPNext refused to delete, retire them now that the chart is applied:
 
 ```sh
 runningtab coa prune --target test
 ```
 
-Review and confirm the prompt. This retires accounts left behind by the teardown. Applying the chart first has pointed the Company defaults at your chart's accounts.
+`prune` deletes accounts the chart does not describe, or disables them where ERPNext refuses deletion, and reports any it could neither delete nor disable. Those can stay; they sit outside your chart and carry no entries.
 
 ## 8. Check the finished chart
 
