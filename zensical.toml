@@ -1,0 +1,104 @@
+# Zensical configuration for the runningtab documentation site.
+#
+# Source lives in docs/. Build with `just docs-build`, preview with
+# `just docs-serve`. .github/workflows/docs.yml publishes main to GitHub Pages.
+# See https://zensical.org/docs/ for the full reference.
+
+[project]
+site_name = "runningtab"
+site_description = "Keep a company's books in ERPNext: apply a chart of accounts, ingest the bank, close the quarter."
+site_author = "Gavin Carothers"
+site_url = "https://transpire-dev.github.io/runningtab/"
+copyright = "Copyright &copy; 2026 Gavin Carothers. Apache-2.0."
+
+docs_dir = "docs"
+site_dir = "site"
+
+repo_url = "https://github.com/transpire-dev/runningtab"
+repo_name = "transpire-dev/runningtab"
+edit_uri = "edit/main/docs/"
+
+# Curated navigation. Pages not listed here, such as the design specs and plans
+# under superpowers/, still build and are reachable by URL and search; they stay
+# out of the sidebar. New reader-facing pages must be added here.
+nav = [
+    { "Home" = "index.md" },
+]
+
+[project.theme]
+language = "en"
+icon.repo = "fontawesome/brands/github"
+
+features = [
+    "content.action.edit",
+    "content.action.view",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.sections",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+    "toc.follow",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "teal"
+accent = "amber"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "black"
+accent = "amber"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/transpire-dev/runningtab"
+
+# Markdown extensions: Zensical's default set (admonitions, fenced code, content
+# tabs, task lists, footnotes, math).
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+[project.markdown_extensions.pymdownx.betterem]
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.magiclink]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.tilde]

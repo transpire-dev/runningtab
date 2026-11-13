@@ -15,3 +15,4 @@ node_modules
 # A package resolves against what its users get, so neither is committed.
 uv.lock
 .python-version
+site/

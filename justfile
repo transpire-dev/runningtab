@@ -51,3 +51,18 @@ test-live:
 capture-period-fixtures:
     @test -n "${RUNNINGTAB_BOOKS:-}" || { echo "capture-period-fixtures: set RUNNINGTAB_BOOKS to the books directory whose test site to use" >&2; exit 2; }
     uv run python tests/capture_period_fixtures.py
+
+# The docs build runs zensical in its own tool environment: it needs nothing
+# from runningtab, and zensical publishes no free-threaded wheels, so it asks
+# for a GIL-enabled Python rather than whichever 3.14 uv finds first.
+zensical := "uvx --python 3.14+gil --from 'zensical>=0.0.52' zensical"
+
+# Build the documentation site (docs/ -> site/); fails on any warning, such as a broken link
+[group('docs')]
+docs-build *ARGS:
+    {{zensical}} build --clean --strict {{ARGS}}
+
+# Serve the documentation site locally with live reload
+[group('docs')]
+docs-serve *ARGS:
+    {{zensical}} serve {{ARGS}}
