@@ -476,6 +476,52 @@ def coa_prune(
             raise typer.Exit(code=1)
 
 
+@coa_app.command("clear-stock")
+def coa_clear_stock(
+    ctx: typer.Context, target: TargetOption, company: CompanyOption = None, yes: YesOption = False
+) -> None:
+    """Delete ERPNext's stock chart from a site whose ledger is empty, so `coa apply` can run.
+
+    A fresh site's setup wizard creates ERPNext's "Standard" chart, and some
+    of it collides with ours in ways `coa apply` refuses to resolve (an
+    ungrouped Retained Earnings where the chart wants a group). This deletes
+    the unnumbered accounts that carry a name from that template, children
+    first, never a root, and only while the company has no GL Entry at all:
+    with anything in the ledger, those accounts are history, not setup.
+    """
+    context = _plan_against(_books(ctx), target, company)
+    with context.client:
+        if not coa.ledger_is_empty(context.client, context.company):
+            typer.echo(
+                f"refusing to clear: {context.company} has entries in its ledger; the stock chart is real history now"
+            )
+            raise typer.Exit(code=1)
+        plan = coa.plan_stock_clear(context.live)
+        typer.echo(f"delete   {len(plan.deletes):4}  (ERPNext's stock chart, children first)")
+        for account in plan.deletes:
+            typer.echo(f"  - {account.document_name}")
+        if plan.kept:
+            typer.echo(f"keep     {len(plan.kept):4}")
+            for account, why in plan.kept:
+                typer.echo(f"  = {account.document_name}: {why}")
+        if not plan.deletes:
+            typer.echo("no stock-chart accounts to clear")
+            return
+        _confirm(yes, f"delete {len(plan.deletes)} stock-chart account(s) from {context.company}?")
+        try:
+            outcome = coa.clear_stock_confirmed(context.client, context.company, plan)
+        except coa.LedgerNotEmptyError as exc:
+            typer.echo(f"refusing to clear: {exc}")
+            raise typer.Exit(code=1) from exc
+        if outcome.cleared_defaults:
+            typer.echo(f"company defaults cleared: {', '.join(outcome.cleared_defaults)}")
+        typer.echo(f"deleted {len(outcome.deleted)}, failed {len(outcome.failed)}")
+        for name, why in outcome.failed:
+            typer.echo(f"  ! {name}: {why}")
+        if outcome.failed:
+            raise typer.Exit(code=1)
+
+
 @coa_app.command("export-gl-codes")
 def coa_export_gl_codes(
     ctx: typer.Context,
