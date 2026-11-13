@@ -42,6 +42,17 @@ nav = [
         { "Rotate the bot key" = "how-to/rotate-the-bot.md" },
         { "Schedule health checks" = "how-to/scheduled-health.md" },
     ] },
+    { "Reference" = [
+        { "coa" = "reference/coa.md" },
+        { "chart" = "reference/chart.md" },
+        { "health" = "reference/health.md" },
+        { "period" = "reference/period.md" },
+        { "mercury" = "reference/mercury.md" },
+        { "forecast" = "reference/forecast.md" },
+        { "access" = "reference/access.md" },
+        { "The books directory" = "reference/books-directory.md" },
+        { "Targets and credentials" = "reference/targets-and-credentials.md" },
+    ] },
 ]
 
 [project.theme]

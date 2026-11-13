@@ -10,7 +10,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import pytest
 import typer
 
 from runningtab.cli import app
@@ -108,7 +107,8 @@ def test_every_documented_command_exists() -> None:
 
 
 def test_every_documented_flag_exists() -> None:
-    global_options = _options(_cli())
+    # Click adds --help to every command without listing it among the params.
+    global_options = _options(_cli()) | {"--help"}
     wrong = {
         " ".join(path): sorted(flags - _options(command) - global_options)
         for path, flags in _reference_commands().items()
@@ -117,7 +117,6 @@ def test_every_documented_flag_exists() -> None:
     assert wrong == {}
 
 
-@pytest.mark.xfail(strict=True, reason="the reference pages are written later in this branch")
 def test_every_command_is_documented() -> None:
     documented = set(_reference_commands())
     missing = [" ".join(path) for path in _leaves(_cli()) if path not in documented]
