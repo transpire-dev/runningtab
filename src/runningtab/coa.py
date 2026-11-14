@@ -273,34 +273,41 @@ def ledger_is_empty(client: Client, company: str) -> bool:
 
 
 def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) -> StockClearOutcome:
-    """Delete a confirmed plan's accounts, after pointing Company's defaults away from them.
+    """Delete a confirmed plan's accounts, each after pointing Company's defaults away from it.
 
     The ledger is probed again here, after the prompt, so an entry posted
     while the prompt sat open still stops the run before anything changes.
-    A refused delete is recorded and the run goes on; an account whose child
-    is still standing is not attempted, since ERPNext would refuse it too.
+    ERPNext refuses to delete an account a Company default names, so each
+    account's defaults are cleared just before its delete and put back if
+    the delete is refused: a refused account keeps its defaults. A refused
+    delete is recorded and the run goes on; an account whose child is still
+    standing is not attempted, since ERPNext would refuse it too.
 
     Raises:
         LedgerNotEmptyError: The company has a GL Entry.
     """
     if not ledger_is_empty(client, company):
         raise LedgerNotEmptyError(f"{company} has entries in its ledger; the stock chart is real history now")
-    deleting = frozenset(a.document_name for a in plan.deletes)
-    cleared = clear_defaults_pointing_at(client, company, deleting)
+    cleared: list[str] = []
     deleted: list[str] = []
     failed: list[tuple[str, str]] = []
     standing: set[str] = set()
     for account in plan.deletes:
-        if account.document_name in standing:
-            failed.append((account.document_name, "a child account could not be deleted"))
+        name = account.document_name
+        if name in standing:
+            failed.append((name, "a child account could not be deleted"))
         else:
+            fields = clear_defaults_pointing_at(client, company, frozenset({name}))
             try:
-                client.delete("Account", account.document_name)
+                client.delete("Account", name)
             except FrappeError as error:
-                failed.append((account.document_name, str(error)))
+                if fields:
+                    client.update("Company", company, dict.fromkeys(fields, name))
+                failed.append((name, str(error)))
             else:
-                deleted.append(account.document_name)
+                cleared.extend(fields)
+                deleted.append(name)
                 continue
         if account.parent_document_name:
             standing.add(account.parent_document_name)
-    return StockClearOutcome(cleared_defaults=cleared, deleted=deleted, failed=failed)
+    return StockClearOutcome(cleared_defaults=sorted(cleared), deleted=deleted, failed=failed)

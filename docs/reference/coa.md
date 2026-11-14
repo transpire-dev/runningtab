@@ -56,7 +56,7 @@ The command checks that the default-account fields exist on Company before touch
 runningtab coa prune --target <test|books> [--company NAME] [--yes] [--allow-unapplied]
 ```
 
-Delete accounts the chart does not describe, or disable them where ERPNext refuses deletion. This is the only destructive command.
+Delete accounts the chart does not describe, or disable them where ERPNext refuses deletion.
 
 ### Options
 
@@ -98,13 +98,13 @@ Delete ERPNext's stock chart from a site whose ledger is empty, so `runningtab c
 | Code | Meaning |
 | --- | --- |
 | `0` | Every listed account was deleted, or there was nothing to clear. |
-| `1` | The company's ledger holds an entry, the prompt was declined, or ERPNext refused an account. |
+| `1` | The company's ledger holds an entry, the prompt was declined, the accounts changed while the prompt was open, or ERPNext refused an account. |
 
 ### Notes
 
 An account is part of the stock chart when it has no account number, is not a root, and carries a name from ERPNext's "Standard" template (copied into `runningtab.stock_chart` from ERPNext's source). Your chart's accounts always carry a number, so they are never candidates. Accounts are deleted children first; a stock group that holds any other account is kept and listed under `keep`.
 
-Before deleting, the command points every Company default-account field away from the accounts it deletes, and probes the ledger again after the prompt. A refused delete is reported with ERPNext's reason, the run continues, and that account's parent groups are left standing.
+After the prompt, the command reads the site again and refuses if the accounts it would delete have changed, then probes the ledger again. Each account's Company default-account fields are cleared just before its delete and put back if ERPNext refuses it, so a refused account keeps its defaults. A refused delete is reported with ERPNext's reason, the run continues, and that account's parent groups are left standing.
 
 On `--target books` it runs as the bot, which holds `delete` on Account.
 

@@ -45,7 +45,7 @@ Reader verification checks effective grants and prohibited mutation flags. It ca
 
 For provisioning on the `books` target, supply your own System Manager API token through `RUNNINGTAB_ADMIN_TOKEN`. ERPNext shows it as `key:secret`; the optional `token ` prefix is accepted. The stored books credential belongs to the bot and cannot provision access.
 
-Mercury category changes require a separate administrator credential. Mercury’s custom-token scopes offer category reads; category writes require a full **Read and Write** token, which can send money. `apply` reads this from `MERCURY_ADMIN_TOKEN`, or `MERCURY_SANDBOX_TOKEN` for the sandbox, and refuses to proceed when it is missing. The token is never stored. Mint it for one sitting, allowlist your IP, and revoke it afterwards.
+Mercury category changes require a separate administrator credential. Mercury’s custom-token scopes offer category reads; category writes require a full **Read and Write** token, which can send money. A credential that can move money, needed to rename a dropdown entry, is a bad idea, and we hate it. `apply` reads this from `MERCURY_ADMIN_TOKEN`, or `MERCURY_SANDBOX_TOKEN` for the sandbox, and refuses to proceed when it is missing. The token is never stored. Mint it for one sitting, allowlist your IP, and revoke it afterwards.
 
 ## Proof before storage
 

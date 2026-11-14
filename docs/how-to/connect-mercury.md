@@ -65,6 +65,9 @@ runningtab mercury categories plan --env production --prune
 
 To apply changes, mint a full **Read and Write** token in Mercury’s dashboard and allowlist your IP. This token can also send money. Keep it only for this sitting; never store it in Secret Manager or a file.
 
+!!! danger "We think this is a bad idea, and we hate it"
+    Mercury offers no token scope that can edit categories without also being able to send money. Its custom-token picker has "Fetch Categories" and nothing that writes them, so renaming one dropdown entry takes a full **Read and Write** token: the most dangerous credential the bank issues, for one of the least dangerous changes. We think that is a bad design and we hate it. runningtab works around it the only way it can: it never stores that token, reads it from your shell for one sitting, and expects you to revoke it as soon as `apply` finishes.
+
 In bash or zsh, enter the token without echoing it:
 
 ```sh

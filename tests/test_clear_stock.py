@@ -78,12 +78,16 @@ class _Client:
         self.entries = entries or []
         self.refuse = refuse or set()
         self.log: builtins.list[str] = []
+        self.company_updates: builtins.list[dict[str, Any]] = []
         self.company_doc: dict[str, Any] = {"name": "VT", "default_cash_account": "Cash - VT"}
 
     def __enter__(self) -> _Client:
         return self
 
     def __exit__(self, *exc: object) -> None:
+        return None
+
+    def close(self) -> None:
         return None
 
     def list(self, doctype: str, **kwargs: Any) -> Any:
@@ -98,6 +102,8 @@ class _Client:
 
     def update(self, doctype: str, name: str, doc: dict[str, Any]) -> Any:
         self.log.append(f"update {doctype} {sorted(doc)}")
+        self.company_updates.append(dict(doc))
+        self.company_doc.update(doc)
         return doc
 
     def delete(self, doctype: str, name: str) -> Any:
@@ -143,20 +149,27 @@ def test_clear_refuses_outright_when_the_ledger_has_entries() -> None:
     assert [line for line in client.log if line != "probe ledger"] == []
 
 
-def _patch_context(monkeypatch, client: _Client, live: list[LiveAccount]) -> None:
+def _patch_context(
+    monkeypatch, client: _Client, live: list[LiveAccount], then: list[LiveAccount] | None = None
+) -> None:
+    """Patch planning to read `live`, and `then` (default: `live` again) on the re-read after the prompt."""
     chart = load_chart(EXAMPLE_BOOKS.chart_path)
-    context = _Context(
-        client=client,  # ty: ignore[invalid-argument-type]
-        company="VT",
-        abbr="VT",
-        chart=chart,
-        by_number={a.number: a for a in chart},
-        plan=ChartPlan(creates=[], renames=[], retypes=[], extras=[], refusals=[]),
-        live=live,
-        with_entries=set(),
-        defaults=load_defaults(EXAMPLE_BOOKS.chart_path),
-    )
-    monkeypatch.setattr("runningtab.cli._plan_against", lambda books, target, company, **_: context)
+
+    def context_for(accounts: list[LiveAccount]) -> _Context:
+        return _Context(
+            client=client,  # ty: ignore[invalid-argument-type]
+            company="VT",
+            abbr="VT",
+            chart=chart,
+            by_number={a.number: a for a in chart},
+            plan=ChartPlan(creates=[], renames=[], retypes=[], extras=[], refusals=[]),
+            live=accounts,
+            with_entries=set(),
+            defaults=load_defaults(EXAMPLE_BOOKS.chart_path),
+        )
+
+    reads = iter([context_for(live), context_for(live if then is None else then)])
+    monkeypatch.setattr("runningtab.cli._plan_against", lambda books, target, company, **_: next(reads))
 
 
 STOCK = [ROOT, CURRENT, CASH_GROUP, CASH]
@@ -202,3 +215,24 @@ def test_cli_with_nothing_to_clear_says_so(monkeypatch) -> None:
     result = runner.invoke(app, ["coa", "clear-stock", "--target", "test"])
     assert result.exit_code == 0
     assert "no stock-chart accounts to clear" in result.output
+
+
+def test_a_refused_account_gets_its_company_defaults_back() -> None:
+    client = _Client(refuse={"Cash - VT"})
+    outcome = coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
+    assert client.log[:3] == [
+        "probe ledger",
+        "update Company ['default_cash_account']",
+        "update Company ['default_cash_account']",
+    ]
+    assert client.company_updates == [{"default_cash_account": None}, {"default_cash_account": "Cash - VT"}]
+    assert outcome.cleared_defaults == []
+
+
+def test_cli_refuses_when_the_tree_changed_while_the_prompt_was_open(monkeypatch) -> None:
+    client = _Client()
+    _patch_context(monkeypatch, client, STOCK, then=[*STOCK, _live("Petty Cash Jar", "Cash In Hand")])
+    result = runner.invoke(app, ["coa", "clear-stock", "--target", "test", "--yes"])
+    assert result.exit_code == 1
+    assert "refusing to clear: the accounts changed since planning" in result.output
+    assert [line for line in client.log if line.startswith(("delete", "update"))] == []

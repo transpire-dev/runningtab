@@ -20,7 +20,7 @@ Creates the custom fields used by the ingest. Re-running compares existing field
 
 ### Notes
 
-Requires administrator credentials through `RUNNINGTAB_ADMIN_TOKEN`. The books bot has no Custom Field permission. See [Access](access.md).
+Runs as an administrator: on `--target books`, your own System Manager token in `RUNNINGTAB_ADMIN_TOKEN`; on `--target test`, the environment credential (`RUNNINGTAB_TEST_URL`, `RUNNINGTAB_TEST_KEY`, `RUNNINGTAB_TEST_SECRET`), which is already an administrator's. The books bot has no Custom Field permission. See [Access](access.md).
 
 On Bank Transaction, creates:
 
@@ -53,7 +53,7 @@ Creates the Bank named `Mercury` and one Bank Account per Mercury account in `me
 
 ### Notes
 
-Requires administrator credentials through `RUNNINGTAB_ADMIN_TOKEN`. The books bot has no Bank or Bank Account permission.
+Runs as an administrator, with the same credentials as `runningtab mercury install-fields`. The books bot has no Bank or Bank Account permission.
 
 Bank Account names must follow ERPNext’s `<account name> - Mercury` convention. Invalid names are refused before anything is created.
 
@@ -195,7 +195,7 @@ Creates missing chart categories and corrects visibility flags on existing categ
 
 Reads its token exclusively from `MERCURY_ADMIN_TOKEN` for production or `MERCURY_SANDBOX_TOKEN` for sandbox. An unset variable is refused by name before any request.
 
-Mercury requires a full Read and Write token for category writes; that token can also send money. Keep it only in the environment for the session, then revoke it. It must never be stored in a file or Secret Manager. Mercury requires an IP allowlist for write-scoped tokens, downgrades an unused write permission after 45 days, and deletes an unused token after 45 days. See [Connect Mercury](../how-to/connect-mercury.md) and [Access model](../explanation/access-model.md).
+Mercury requires a full Read and Write token for category writes; that token can also send money. We think that is a bad idea and we hate it; see [Connect Mercury](../how-to/connect-mercury.md). Keep it only in the environment for the session, then revoke it. It must never be stored in a file or Secret Manager. Mercury requires an IP allowlist for write-scoped tokens, downgrades an unused write permission after 45 days, and deletes an unused token after 45 days. See [Connect Mercury](../how-to/connect-mercury.md) and [Access model](../explanation/access-model.md).
 
 Without `--prune`, nothing is deleted. Pruning checks category UUIDs against an exhaustive transaction read that refuses short reads. Categories in use are retained and reported as `in use  <n> transaction(s)  <name>`. Re-code those transactions in Mercury to make a category eligible for deletion.
 

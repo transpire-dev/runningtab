@@ -433,7 +433,7 @@ def coa_prune(
         ),
     ] = False,
 ) -> None:
-    """Delete accounts the chart does not describe -- the only destructive command.
+    """Delete accounts the chart does not describe. With `coa clear-stock`, one of two commands that delete.
 
     Refuses when the chart plan carries a refusal that could make the extras
     set wrong, or (without `--allow-unapplied`) when the chart is not yet
@@ -476,6 +476,24 @@ def coa_prune(
             raise typer.Exit(code=1)
 
 
+def _print_stock_clear_plan(plan: coa.StockClearPlan) -> None:
+    typer.echo(f"delete   {len(plan.deletes):4}  (ERPNext's stock chart, children first)")
+    for account in plan.deletes:
+        typer.echo(f"  - {account.document_name}")
+    if plan.kept:
+        typer.echo(f"keep     {len(plan.kept):4}")
+        for account, why in plan.kept:
+            typer.echo(f"  = {account.document_name}: {why}")
+
+
+def _print_stock_clear_outcome(outcome: coa.StockClearOutcome) -> None:
+    if outcome.cleared_defaults:
+        typer.echo(f"company defaults cleared: {', '.join(outcome.cleared_defaults)}")
+    typer.echo(f"deleted {len(outcome.deleted)}, failed {len(outcome.failed)}")
+    for name, why in outcome.failed:
+        typer.echo(f"  ! {name}: {why}")
+
+
 @coa_app.command("clear-stock")
 def coa_clear_stock(
     ctx: typer.Context, target: TargetOption, company: CompanyOption = None, yes: YesOption = False
@@ -489,7 +507,8 @@ def coa_clear_stock(
     first, never a root, and only while the company has no GL Entry at all:
     with anything in the ledger, those accounts are history, not setup.
     """
-    context = _plan_against(_books(ctx), target, company)
+    books = _books(ctx)
+    context = _plan_against(books, target, company)
     with context.client:
         if not coa.ledger_is_empty(context.client, context.company):
             typer.echo(
@@ -497,27 +516,24 @@ def coa_clear_stock(
             )
             raise typer.Exit(code=1)
         plan = coa.plan_stock_clear(context.live)
-        typer.echo(f"delete   {len(plan.deletes):4}  (ERPNext's stock chart, children first)")
-        for account in plan.deletes:
-            typer.echo(f"  - {account.document_name}")
-        if plan.kept:
-            typer.echo(f"keep     {len(plan.kept):4}")
-            for account, why in plan.kept:
-                typer.echo(f"  = {account.document_name}: {why}")
+        _print_stock_clear_plan(plan)
         if not plan.deletes:
             typer.echo("no stock-chart accounts to clear")
             return
         _confirm(yes, f"delete {len(plan.deletes)} stock-chart account(s) from {context.company}?")
+        fresh = _plan_against(books, target, company)
+        fresh.client.close()
+        if coa.plan_stock_clear(fresh.live) != plan:
+            typer.echo(
+                "refusing to clear: the accounts changed since planning; re-run `coa clear-stock` to review them"
+            )
+            raise typer.Exit(code=1)
         try:
             outcome = coa.clear_stock_confirmed(context.client, context.company, plan)
         except coa.LedgerNotEmptyError as exc:
             typer.echo(f"refusing to clear: {exc}")
             raise typer.Exit(code=1) from exc
-        if outcome.cleared_defaults:
-            typer.echo(f"company defaults cleared: {', '.join(outcome.cleared_defaults)}")
-        typer.echo(f"deleted {len(outcome.deleted)}, failed {len(outcome.failed)}")
-        for name, why in outcome.failed:
-            typer.echo(f"  ! {name}: {why}")
+        _print_stock_clear_outcome(outcome)
         if outcome.failed:
             raise typer.Exit(code=1)
 
