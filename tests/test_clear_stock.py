@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from icedcoffee_sync.apply.diff import ChartPlan
 from icedcoffee_sync.apply.model import LiveAccount
-from icedcoffee_sync.frappe.errors import LinkExistsError
+from icedcoffee_sync.frappe.errors import FrappeError, LinkExistsError
 from typer.testing import CliRunner
 
 from runningtab import coa
@@ -277,5 +277,18 @@ def test_a_delete_that_fails_in_transport_puts_the_defaults_back_and_raises() ->
     client.delete = delete
     client.accounts = {"Cash - VT"}
     with pytest.raises(_TransportError):
+        coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CURRENT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
+    assert client.company_updates == [{"default_cash_account": None}, {"default_cash_account": "Cash - VT"}]
+
+
+def test_a_server_error_that_is_not_a_refusal_stops_the_run_and_puts_the_defaults_back() -> None:
+    client = _Client()
+
+    def delete(doctype: str, name: str) -> None:
+        raise FrappeError("503 Service Unavailable")
+
+    client.delete = delete
+    client.accounts = {"Cash - VT"}
+    with pytest.raises(FrappeError, match="503"):
         coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CURRENT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
     assert client.company_updates == [{"default_cash_account": None}, {"default_cash_account": "Cash - VT"}]

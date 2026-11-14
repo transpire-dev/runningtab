@@ -8,7 +8,7 @@ Checks whether your books are current. For background, see [how runningtab works
 runningtab health --target <test|books> [--company NAME] [--strict] [--mercury-mapping PATH]
 ```
 
-Prints six health sections covering bank balances, uncoded spend, suspense, webhook subscriptions, the event cursor, and closed periods. Reads only. ERPNext checks run as the reader, whose credential the server refuses every write for.
+Prints six health sections covering bank balances, uncoded spend, suspense, webhook subscriptions, the event cursor, and closed periods. Reads only: it writes nothing anywhere. On `--target books`, ERPNext checks run as the reader, which can change no ledger document (Frappe still grants it, like every signed-in user, create, write and delete on File). On `--target test` they use the test site's one administrator credential.
 
 ### Options
 

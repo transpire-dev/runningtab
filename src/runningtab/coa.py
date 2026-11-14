@@ -20,7 +20,7 @@ from icedcoffee_sync.apply.prune import PrunePlan, PruneRefusal, PruneReport, ex
 from icedcoffee_sync.erpnext.accounts import accounts_with_entries, company_abbr, document_name, read_chart
 from icedcoffee_sync.erpnext.company import clear_defaults_pointing_at, require_default_fields, set_default_accounts
 from icedcoffee_sync.frappe.client import Client, SiteConfig
-from icedcoffee_sync.frappe.errors import FrappeError
+from icedcoffee_sync.frappe.errors import ChildExistsError, LinkExistsError, ValidationError
 
 from runningtab.stock_chart import STANDARD_CHART_PARENTS
 
@@ -216,6 +216,12 @@ def prune_confirmed(context: Context, prune_plan: PrunePlan, *, allow_unapplied:
     return PruneOutcome(cleared_defaults=cleared, report=report, parking=parking)
 
 
+# ERPNext declining to delete this one account, the same classes `prune`
+# treats as a refusal. Anything else -- a rate limit, a 5xx, a dropped
+# connection -- says nothing about the account and stops the run.
+STOCK_DELETE_REFUSALS: tuple[type[Exception], ...] = (LinkExistsError, ValidationError, ChildExistsError)
+
+
 class LedgerNotEmptyError(RuntimeError):
     """The company's ledger holds entries, so the stock chart is real history and stays."""
 
@@ -281,7 +287,7 @@ def ledger_is_empty(client: Client, company: str) -> bool:
 
 
 def _restore_defaults_if_still_there(client: Client, company: str, fields: list[str], name: str) -> None:
-    """After a delete failed in transport, point the cleared defaults back at the account if it survived.
+    """After a delete failed for a reason other than a refusal, point the cleared defaults back if the account survived.
 
     Best effort while another error is already on its way up: a site that
     just dropped a connection may drop this one too, and that error must
@@ -303,7 +309,9 @@ def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) ->
     account's defaults are cleared just before its delete and put back if
     the delete is refused: a refused account keeps its defaults. A refused
     delete is recorded and the run goes on; an account whose child is still
-    standing is not attempted, since ERPNext would refuse it too.
+    standing is not attempted, since ERPNext would refuse it too. Any other
+    error (a rate limit, a server error, a dropped connection) puts that
+    account's defaults back where it can and stops the run.
 
     Raises:
         LedgerNotEmptyError: The company has a GL Entry.
@@ -322,7 +330,7 @@ def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) ->
             fields = clear_defaults_pointing_at(client, company, frozenset({name}))
             try:
                 client.delete("Account", name)
-            except FrappeError as error:
+            except STOCK_DELETE_REFUSALS as error:
                 if fields:
                     client.update("Company", company, dict.fromkeys(fields, name))
                 failed.append((name, str(error)))
