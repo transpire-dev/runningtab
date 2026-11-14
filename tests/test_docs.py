@@ -199,7 +199,7 @@ def test_invocation_problems_name_what_the_cli_rejects() -> None:
 
 
 def test_every_invocation_on_every_page_is_one_the_cli_accepts() -> None:
-    pages = [page for page in sorted(DOCS.rglob("*.md")) if "superpowers" not in page.parts]
+    pages = sorted(DOCS.rglob("*.md"))
     problems = [
         f"{page.relative_to(DOCS)}: {problem}"
         for page in pages

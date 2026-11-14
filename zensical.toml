@@ -18,9 +18,8 @@ repo_url = "https://github.com/transpire-dev/runningtab"
 repo_name = "transpire-dev/runningtab"
 edit_uri = "edit/main/docs/"
 
-# Curated navigation. Pages not listed here, such as the design specs and plans
-# under superpowers/, still build and are reachable by URL and search; they stay
-# out of the sidebar. New reader-facing pages must be added here.
+# Curated navigation. A page not listed here still builds and is reachable by
+# URL and search, but stays out of the sidebar; add every new page here.
 nav = [
     { "Home" = "index.md" },
     { "Tutorial" = "tutorial.md" },
