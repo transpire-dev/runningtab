@@ -73,7 +73,7 @@ Establishes initial state from Mercury transaction lists and records the corresp
 | `--target` | Yes | Selects the ERPNext site: `test` or `books`. |
 | `--company` | No | Sets the company name; defaults to the site’s only company. |
 | `--state` | No | Sets the ingest state file; defaults to the XDG state path described below. |
-| `--dry-run` | No | Reports what would post; writes nothing. |
+| `--dry-run` | No | Reports what would post. Writes nothing to ERPNext and leaves the cursor where it was; the local state file is still created on first use. |
 | `--help` | No | Shows help and exits. |
 
 ### Exit codes
@@ -102,7 +102,7 @@ Applies every event after the saved cursor, then refreshes Mercury’s GL code a
 | `--target` | Yes | Selects the ERPNext site: `test` or `books`. |
 | `--company` | No | Sets the company name; defaults to the site’s only company. |
 | `--state` | No | Sets the ingest state file; defaults to the XDG state path described below. |
-| `--dry-run` | No | Reports what would post; writes nothing. |
+| `--dry-run` | No | Reports what would post. Writes nothing to ERPNext and leaves the cursor where it was; the local state file is still created on first use. |
 | `--help` | No | Shows help and exits. |
 
 ### Exit codes

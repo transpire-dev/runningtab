@@ -79,6 +79,7 @@ class _Client:
         self.refuse = refuse or set()
         self.log: builtins.list[str] = []
         self.company_updates: builtins.list[dict[str, Any]] = []
+        self.accounts: set[str] = set()
         self.company_doc: dict[str, Any] = {"name": "VT", "default_cash_account": "Cash - VT"}
 
     def __enter__(self) -> _Client:
@@ -91,6 +92,9 @@ class _Client:
         return None
 
     def list(self, doctype: str, **kwargs: Any) -> Any:
+        if doctype == "Account":
+            (name,) = (value for field, _op, value in kwargs["filters"] if field == "name")
+            return [{"name": name}] if name in self.accounts else []
         assert doctype == "GL Entry"
         assert ["company", "=", "VT"] in kwargs["filters"]
         self.log.append("probe ledger")
@@ -219,7 +223,7 @@ def test_cli_with_nothing_to_clear_says_so(monkeypatch) -> None:
 
 def test_a_refused_account_gets_its_company_defaults_back() -> None:
     client = _Client(refuse={"Cash - VT"})
-    outcome = coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
+    outcome = coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CURRENT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
     assert client.log[:3] == [
         "probe ledger",
         "update Company ['default_cash_account']",
@@ -250,3 +254,28 @@ def test_the_template_parents_are_erpnext_standard_chart() -> None:
     assert STANDARD_CHART_PARENTS["Cash"] == "Cash In Hand"
     assert STANDARD_CHART_PARENTS["Current Assets"] == "Application of Funds (Assets)"
     assert set(STANDARD_CHART_PARENTS) == STANDARD_CHART_ACCOUNT_NAMES
+
+
+def test_a_stock_name_under_one_of_our_numbered_accounts_is_not_stock() -> None:
+    our_group = _live("Cash In Hand", "Current Assets", number="1120", is_group=True)
+    own_cash = _live("Cash", "1120 - Cash In Hand")
+    plan = coa.plan_stock_clear([ROOT, CURRENT, our_group, own_cash])
+    assert [a.document_name for a in plan.deletes] == []
+    assert [a.document_name for a, _ in plan.kept] == ["Current Assets - VT"]
+
+
+class _TransportError(Exception):
+    pass
+
+
+def test_a_delete_that_fails_in_transport_puts_the_defaults_back_and_raises() -> None:
+    client = _Client()
+
+    def delete(doctype: str, name: str) -> None:
+        raise _TransportError("connection reset")
+
+    client.delete = delete  # ty: ignore[invalid-assignment]
+    client.accounts = {"Cash - VT"}
+    with pytest.raises(_TransportError):
+        coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CURRENT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
+    assert client.company_updates == [{"default_cash_account": None}, {"default_cash_account": "Cash - VT"}]

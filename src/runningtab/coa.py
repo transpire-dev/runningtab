@@ -9,6 +9,7 @@ to `--allow-unapplied`.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 
 from icedcoffee_sync.apply.diff import ChartPlan, Refusal, RefusalReason, diff
@@ -240,8 +241,10 @@ def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
     """The stock-chart accounts on the site, deepest first; a stock group holding anything else is kept.
 
     An account is the stock chart's when it has no account number (the
-    chart's own accounts always carry one), is not a root, and its name and
-    its parent's name are a pair in ERPNext's Standard template.
+    chart's own accounts always carry one), is not a root, its name and its
+    parent's name are a pair in ERPNext's Standard template, and that parent
+    is itself a root or the stock chart's -- so a stock name under one of our
+    numbered accounts is never taken for ERPNext's.
     """
     by_name = {a.document_name: a for a in live}
     children: dict[str, list[LiveAccount]] = {}
@@ -251,7 +254,9 @@ def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
 
     def is_stock(account: LiveAccount) -> bool:
         parent = by_name.get(account.parent_document_name or "")
-        return parent is not None and not account.number and STANDARD_CHART_PARENTS.get(account.name) == parent.name
+        if parent is None or account.number or STANDARD_CHART_PARENTS.get(account.name) != parent.name:
+            return False
+        return parent.parent_document_name is None or is_stock(parent)
 
     def depth(account: LiveAccount) -> int:
         level, parent = 0, account.parent_document_name
@@ -273,6 +278,20 @@ def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
 def ledger_is_empty(client: Client, company: str) -> bool:
     """Whether the company has no GL Entry at all, submitted or cancelled."""
     return not client.list("GL Entry", fields=["name"], filters=[["company", "=", company]], limit=1)
+
+
+def _restore_defaults_if_still_there(client: Client, company: str, fields: list[str], name: str) -> None:
+    """After a delete failed in transport, point the cleared defaults back at the account if it survived.
+
+    Best effort while another error is already on its way up: a site that
+    just dropped a connection may drop this one too, and that error must
+    not replace the one that says what happened.
+    """
+    if not fields:
+        return
+    with contextlib.suppress(Exception):
+        if client.list("Account", fields=["name"], filters=[["name", "=", name]], limit=1):
+            client.update("Company", company, dict.fromkeys(fields, name))
 
 
 def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) -> StockClearOutcome:
@@ -307,6 +326,9 @@ def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) ->
                 if fields:
                     client.update("Company", company, dict.fromkeys(fields, name))
                 failed.append((name, str(error)))
+            except Exception:
+                _restore_defaults_if_still_there(client, company, fields, name)
+                raise
             else:
                 cleared.extend(fields)
                 deleted.append(name)
