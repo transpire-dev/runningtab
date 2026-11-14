@@ -1,66 +1,45 @@
 # How runningtab works
 
-runningtab connects a written chart of accounts, your bank activity, and your ledger. You keep the books configuration in git, use a disposable ledger to test changes, and explicitly choose the real ledger when you work on your company’s books. Machines prepare drafts; humans decide what gets posted.
+runningtab connects a written chart of accounts, bank activity, and a ledger. You keep the books configuration in git, test changes against a disposable ledger, and explicitly select the real ledger when working on the company’s books. Machines prepare drafts; humans decide what gets posted.
 
 The recurring rhythm is to sync the bank, reconcile transactions, check health, and close each quarter into a retained record.
 
-## The pieces
+## The books directory
 
-A books directory defines the books runningtab works with. Three outside systems hold the bank activity, ledger, and closed records:
+runningtab ships no books. You supply a books directory and keep it under version control so the chart and configuration have a history.
 
-- **Mercury** is the bank. runningtab reads its accounts and transactions. Its only writes to Mercury manage custom categories.
-- **ERPNext** is the ledger. runningtab manages the chart there, brings in bank transactions, and prepares draft journal entries for human review.
-- **Cloud Storage** holds closed quarters in a record bucket under a retention policy.
+Its five files define the chart, bank-account connections, expected cash movements, QuickBooks Online export information, and connections to outside systems. The chart lives in `chart.coa`, an indented outline of account numbers, names, hierarchy, and accounting types. Chart changes begin there.
 
-Google Secret Manager supplies credentials. An administrator’s own token for one-off admin commands comes from `RUNNINGTAB_ADMIN_TOKEN`.
+An annotated chart document explains each account’s purpose and how to choose between neighbouring accounts. Its account tables are generated from the chart. [Why a written chart matters](why-a-written-chart.md) explains the reasoning behind runningtab.
 
-The books directory tells runningtab how these fit together.
+Every command requires an explicitly selected books directory through `--books DIR` or `RUNNINGTAB_BOOKS`. See the [books directory reference](../reference/books-directory.md) for its contents.
 
-## Your books live in a directory kept in git
+## Three systems and credentials
 
-runningtab ships no books. You supply a books directory and keep its files under version control so that the chart and configuration have a history.
+**ERPNext** holds the ledger. runningtab manages its chart, imports bank transactions, and prepares draft journal entries for human review.
 
-The directory contains five files:
+**Mercury** holds bank activity. runningtab reads accounts and transactions; its only writes manage custom categories.
 
-| File | Purpose |
-| --- | --- |
-| `chart.coa` | Your chart of accounts and company default accounts |
-| `mercury.toml` | Connections between Mercury accounts, chart accounts, and ERPNext Bank Accounts |
-| `forecast.toml` | Expected cash movements used by forecasting |
-| `qbo.toml` | Chart information needed for QuickBooks Online period exports |
-| `books.toml` | The books’ name, site hosts, secret identifiers, record buckets, identities, and chart documentation path |
+**Cloud Storage** holds closed-quarter records in a bucket under a retention policy.
 
-The chart is an indented outline in `chart.coa`. It defines account numbers, names, hierarchy, and accounting types. Changes to the chart begin in this versioned file. The annotated chart document explains what accounts are for and how to choose between neighbouring accounts; its account tables are generated from the chart.
+Google Secret Manager supplies credentials. The books directory describes how these systems fit together. Follow the [setup guide](../how-to/set-up.md) to connect them.
 
-See [why a written chart matters](why-a-written-chart.md) for the reasoning behind this arrangement.
+## Two explicit targets
 
-Every command reads one explicitly selected books directory, supplied through `--books DIR` or `RUNNINGTAB_BOOKS`. There is no default. runningtab also validates `books.toml` strictly, rejecting missing and unknown keys.
+Selecting a books directory identifies the configuration. Selecting a target identifies the ledger.
 
-The repository includes a complete [example books directory](https://github.com/transpire-dev/runningtab/tree/main/examples/books). The [books directory reference](../reference/books-directory.md) describes the configuration in detail.
+Every command that touches the ledger requires `--target test` or `--target books`. There is no default target.
 
-## Two targets separate testing from the real ledger
-
-Every command that touches the ledger requires an explicit target:
-
-- `--target test` selects a disposable ERPNext site. Its host must appear in `books.toml` under `site.test_hosts`.
-- `--target books` selects the real ledger. Its credential is fetched from Secret Manager when used and cannot be replaced by an exported environment variable.
-
-There is no default target. Selecting the books directory identifies the configuration; selecting the target identifies the ledger that the command will reach.
-
-The test host allowlist is checked explicitly, and it cannot include the real ledger’s configured host. See [targets and credentials](../reference/targets-and-credentials.md) for credential selection details.
+The test target uses a disposable ERPNext site whose host must be allowlisted in `books.toml`. That allowlist cannot include the real ledger’s configured host. The books target selects the real ledger and fetches its credential from Secret Manager.
 
 ## Machines draft, humans post
 
-The bot can create drafts. ERPNext’s server refuses its attempts to submit documents that commit money to the general ledger.
+ERPNext’s server permissions prevent the bot from submitting Journal Entries or Purchase Invoices that commit money to the general ledger.
 
-The bot’s one permitted submission is a Bank Transaction, which posts nothing to the general ledger. This lets bank activity arrive for reconciliation while a human retains control over posting accounting entries.
+Its sole submission exception is a Bank Transaction. This records a bank statement line and posts nothing to the general ledger. Submitted bank transactions are required for reconciliation; a human supplies the accounting treatment.
 
-The [access model](access-model.md) explains how that boundary is enforced.
+## The working rhythm
 
-## The daily and quarterly rhythm
+Sync brings Mercury activity into ERPNext. Reconciliation connects bank transactions with accounting entries. runningtab can draft entries for coded bank rows and attach receipts uploaded at the bank.
 
-Daily work starts with syncing Mercury activity into ERPNext. Reconciliation connects bank transactions with the accounting entries that explain them. runningtab can draft a journal entry for a coded bank row and attach the receipt a person uploaded at the bank.
-
-Health checks accompany that work. They read Mercury through the same bank client and reconciliation logic used by ingestion, keeping the checks aligned with the import process. The [daily reconciliation guide](../how-to/daily-reconciliation.md) covers the working routine.
-
-At quarter end, closing produces records stored in Cloud Storage under the bucket’s retention policy. Read [what a close guarantees](what-a-close-guarantees.md) for the meaning of those records and the [quarterly close guide](../how-to/close-a-quarter.md) for the procedure.
+Use the [daily guide](../how-to/daily.md) for syncing, reconciliation, and health checks, and the [quarterly close guide](../how-to/close-a-quarter.md) for retaining records. Command details are available through `runningtab <command> --help`.

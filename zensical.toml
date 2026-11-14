@@ -23,36 +23,18 @@ edit_uri = "edit/main/docs/"
 nav = [
     { "Home" = "index.md" },
     { "Tutorial" = "tutorial.md" },
-    { "Explanation" = [
-        { "How it works" = "explanation/how-it-works.md" },
-        { "Why write the chart down" = "explanation/why-a-written-chart.md" },
-        { "Access model" = "explanation/access-model.md" },
-        { "How the ingest decides" = "explanation/how-the-ingest-decides.md" },
-        { "What a close guarantees" = "explanation/what-a-close-guarantees.md" },
-    ] },
     { "How-to guides" = [
-        { "Set up a new site" = "how-to/new-site.md" },
-        { "Connect Mercury" = "how-to/connect-mercury.md" },
-        { "Reconcile daily" = "how-to/daily-reconciliation.md" },
+        { "Set up a site" = "how-to/set-up.md" },
+        { "Daily operations" = "how-to/daily.md" },
         { "Close a quarter" = "how-to/close-a-quarter.md" },
-        { "Reopen and re-close" = "how-to/reopen-and-reclose.md" },
-        { "Late bank activity" = "how-to/late-bank-activity.md" },
-        { "Run a capital forecast" = "how-to/capital-forecast.md" },
-        { "Rotate the bot key" = "how-to/rotate-the-bot.md" },
-        { "Schedule health checks" = "how-to/scheduled-health.md" },
     ] },
     { "Reference" = [
-        { "coa" = "reference/coa.md" },
-        { "chart" = "reference/chart.md" },
-        { "health" = "reference/health.md" },
-        { "period" = "reference/period.md" },
-        { "mercury" = "reference/mercury.md" },
-        { "forecast" = "reference/forecast.md" },
-        { "access" = "reference/access.md" },
         { "The books directory" = "reference/books-directory.md" },
-        { "Targets and credentials" = "reference/targets-and-credentials.md" },
     ] },
-    { "Contributing" = "contributing.md" },
+    { "Explanation" = [
+        { "Why write the chart down" = "explanation/why-a-written-chart.md" },
+        { "How it works" = "explanation/how-it-works.md" },
+    ] },
 ]
 
 [project.theme]

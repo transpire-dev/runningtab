@@ -1,104 +1,93 @@
 # Close a quarter
 
-Use this guide when you have reconciled a quarter and are ready to lock it and store its accounting package. You will export a draft, review it, run the close, and confirm the result with `period status`. For the checks behind the close and the guarantees of the stored package, see [What a close guarantees](../explanation/what-a-close-guarantees.md).
+Close a reconciled quarter to lock its ledger and store an accounting package for an accountant or auditor unfamiliar with your books. The package contains financial statements, the general ledger, open receivables and payables, bank reconciliation, a QuickBooks Online import kit, and supporting documents. `MANIFEST.md` explains its contents; `SHA256SUMS` records file checksums.
 
 ## Before you start
 
-- Have working ledger and Mercury credentials for your target. See [Targets and credentials](../reference/targets-and-credentials.md).
-- For `--target books`, have your own System Manager API `key:secret` ready. Closing requires `RUNNINGTAB_ADMIN_TOKEN`; a stored credential cannot authorize the close.
-- Set up Application Default Credentials for an identity with object-create and object-viewer access to the record bucket. `period close`, `period status`, and `health` require these credentials:
+Have working ledger and Mercury credentials, including the reader credential for export and status. For closing `books`, have your own System Manager API `key:secret`.
 
-    ```sh
-    gcloud auth application-default login
-    ```
+Health, close, and status require Application Default Credentials with object-create and object-viewer access to the record bucket:
 
-- Choose the quarter in `YYYYQn` format, such as `2026Q3`. Replace `YYYYQn` in the commands below with your quarter.
-- If you need to select a company, add `--company "Company name"` to the `period` commands. Otherwise, they default to the site's only company.
+```sh
+gcloud auth application-default login
+```
 
-Practise with `--target test` first. Its environment credential is already an administrator's, and its packages go to `record_buckets.test`. The Mercury sandbox needs its own account mapping: pass `--mercury-mapping PATH` to each `period` command. The default `mercury.toml` names only real Mercury accounts.
+Replace `YYYYQn` below with your quarter, such as `2026Q3`. If the site has multiple companies, add `--company "Company name"` to period commands. Use `runningtab <command> --help` for command options.
 
 ## What blocks a close
 
-`period close` refuses, before it locks anything, while any of these holds. Each refusal names the document or the condition:
+The close refuses before locking anything when:
 
-- The quarter has not ended yet.
-- An entry dated in the quarter sits in the suspense account (`5299`).
+- The quarter has not ended.
+- An entry dated in the quarter sits in suspense (`5299`).
 - A submitted Bank Transaction dated in the quarter is not fully reconciled.
-- A draft Journal Entry or Purchase Invoice is dated in the quarter. That includes drafts the ingest proposed and nobody submitted or deleted: a draft can never be submitted once its quarter is locked.
-- A Mercury account and the ledger disagree at the quarter's end.
-- Books Closed Through is not where this quarter expects it: at the previous quarter's end once an earlier quarter is stored (or at this quarter's end, when recovering a lock whose store failed).
-- A quarter before this one was never stored while a later one is.
+- A draft Journal Entry or Purchase Invoice is dated in the quarter, including unsubmitted ingest drafts. Drafts cannot be submitted once their quarter is locked.
+- A Mercury account and the ledger disagree at quarter end.
+- Books Closed Through is misplaced: it must be at the previous quarter’s end once an earlier quarter is stored, or this quarter’s end when recovering a lock whose store failed.
+- An earlier quarter was never stored while a later one is.
 - `role_allowed_for_frozen_entries` is set on the Company.
-- The quarter already has a complete stored package. Reopen it first to close it again.
+- The quarter already has a complete stored package. Reopen it before closing again.
 
 ## Close the quarter
 
-1. **Reconcile everything in the quarter and run `health`.**
+1. Complete [daily reconciliation](daily.md), then run health:
 
-    Follow [Daily reconciliation](daily-reconciliation.md), then run the health check.
+   ```sh
+   runningtab health --target books
+   ```
 
-    ```sh
-    runningtab health --target books
-    ```
+2. Export a draft:
 
-    See the [Health reference](../reference/health.md) for the check.
+   ```sh
+   runningtab period export --target books --quarter YYYYQn
+   ```
 
-2. **Export and review a draft.**
+   Open `<quarter>-DRAFT/MANIFEST.md`. Review the statements, open receivables and payables, bank reconciliation, and supporting documents. A bank difference still produces a draft for investigation. A build failure writes nothing. Export refuses an existing destination.
 
-    ```sh
-    runningtab period export --target books --quarter YYYYQn
-    ```
+3. Set your administrator credential:
 
-    This reads the ledger and bank and creates `<quarter>-DRAFT/` locally. Open its `MANIFEST.md` for a description of the package. Review the financial statements, open receivables and payables, bank reconciliation, and supporting documents.
+   ```sh
+   export RUNNINGTAB_ADMIN_TOKEN='YOUR_KEY:YOUR_SECRET'
+   ```
 
-    Exit code `0` means every Mercury account reconciles with the ledger at quarter end. A bank difference returns `1` and still writes the draft for investigation. If the package cannot be built, the command returns `1` and writes nothing. An invalid quarter format returns `2`.
+   Replace the placeholder with your own System Manager `key:secret`. The `books` close refuses before any request if this variable is unset. Stored credentials cannot authorize it.
 
-    An existing output directory is refused. To export another draft, choose a new directory with `--output`:
+4. Close:
 
-    ```sh
-    runningtab period export --target books --quarter YYYYQn --output ./quarter-review-2
-    ```
+   ```sh
+   runningtab period close --target books --quarter YYYYQn
+   ```
 
-3. **Set your administrator credential.**
+5. Confirm:
 
-    Replace the placeholder with your own System Manager API `key:secret`:
+   ```sh
+   runningtab period status --target books
+   ```
 
-    ```sh
-    export RUNNINGTAB_ADMIN_TOKEN='YOUR_KEY:YOUR_SECRET'
-    ```
+   Check that every quarter reports `ok` and no problems remain. Status rebuilds packages without writing anything and checks the lock.
 
-    For `--target books`, the close command refuses to make any request if this variable is unset.
+## What success guarantees
 
-4. **Run the close.**
+Books Closed Through reaches the quarter’s end. The package has passed cross-checks against ERPNext’s Trial Balance and receivables/payables reports, matched byte for byte across the lock, and been uploaded and read back for verification.
 
-    ```sh
-    runningtab period close --target books --quarter YYYYQn
-    ```
+Packages live under `<company-abbr>/<quarter>/` in the configured record bucket. Re-closes add `revN/` revisions. Stored packages are never deleted or overwritten.
 
-    The command cross-checks the draft against ERPNext's Trial Balance and AR/AP reports, moves Books Closed Through to the quarter's last day, and rebuilds the package. It requires the rebuild to be byte-identical, then uploads the package and reads every object back to verify it.
+## Recover after a failure
 
-    The package is stored under `<company-abbr>/<quarter>/` in the bucket named by `record_buckets.books` in `books.toml`. A reopened quarter's re-close adds a `revN/` revision. Stored packages are never deleted or overwritten.
+Before the lock, nothing has changed. Address the reported failure and retry.
 
-5. **Confirm the result.**
+After the lock, it stays in place; there is no rollback. Read the reported Books Closed Through value and next step. Always run `runningtab period status --target books` first: an error can arrive after the package landed.
 
-    ```sh
-    runningtab period status --target books
-    ```
+For a first close with no stored package, rerun the close. It repeats readiness checks against the locked ledger. If recovery from a re-close is still needed, reopen the quarter and close it again, then re-close every later stored quarter in order.
 
-    Check that the stored packages match the ledger and the lock is intact. Status names changed or missing files and reports reopened quarters, a lock without a stored package, and `role_allowed_for_frozen_entries` left set. It exits `1` unless every check is clean.
+## Reopen and re-close
 
-## If something goes wrong
+Check status and identify every later stored quarter. A person must move the Company’s Books Closed Through back to the previous quarter’s end in ERPNext. There is no reopen command.
 
-**Failure before the lock.** Nothing has changed. Address the reported failure before trying the close again.
+Correct the quarter, close it again, then re-close every later stored quarter chronologically. Status and health fail until the sequence is complete. Finish by checking status.
 
-**Failure after the lock on a first close.** The lock stays in place; there is no rollback. The command prints Books Closed Through and names the next step. Check status first:
+## Late bank activity
 
-```sh
-runningtab period status --target books
-```
+Every late Mercury row dated in a closed quarter changes its rebuilt bank reconciliation. Period status signals every such row. Sync’s `closed` line covers only rows it would draft vouchers for.
 
-An error can arrive after the package landed. If it is already stored, another close will be refused. If it has not landed, run `period close` again. It recognizes the lock at quarter end, repeats readiness and cross-checks against the locked ledger, and stores the package.
-
-**Failure on a re-close.** Check status first: the new revision may already have landed. A re-run is refused when the quarter already has a stored package. If recovery is still needed, [reopen the quarter and close it again](reopen-and-reclose.md), then re-close every stored quarter after it in order.
-
-**The ledger moved between the check and the lock.** The refusal names every differing file and the vouchers whose general-ledger rows differ. If the posting belongs in the quarter, run `close` again, reopening first on a re-close. If it does not belong, reopen the quarter and reverse it first.
+Reopen the affected quarter, sync again, and book the activity in its original quarter using [daily reconciliation](daily.md). Then re-close it and every later stored quarter in order, and check status.
