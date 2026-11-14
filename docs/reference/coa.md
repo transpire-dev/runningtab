@@ -25,7 +25,7 @@ Exits non-zero if the plan carries a refusal. With `--require-empty`, also exits
 
 ### Notes
 
-The server-enforced reader credential allows this command to run on a merge request, where the branch under review controls the code executed by the job.
+The reader credential cannot change any account: the server refuses it every write except the create, write and delete on File that Frappe grants every signed-in user. It can still read the whole ledger, so run `coa plan` with it only from code you trust. See [the access model](../explanation/access-model.md).
 
 ## `runningtab coa apply`
 

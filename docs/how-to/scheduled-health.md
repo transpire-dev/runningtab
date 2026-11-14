@@ -1,6 +1,6 @@
 # Schedule health checks
 
-Run `runningtab health` on a schedule when you want an alert if your books fall out of date or a check cannot run. It reads only and runs as the reader on ERPNext. Run it on the same machine as `runningtab mercury sync` so it can read the ingest’s event cursor. For background on the checks, see the [health reference](../reference/health.md); for why closed quarters are rebuilt, see [what a close guarantees](../explanation/what-a-close-guarantees.md).
+Run `runningtab health` on a schedule when you want an alert if your books fall out of date or a check cannot run. It reads only and runs as the reader on ERPNext. Run it on the same machine as `runningtab mercury sync`, with sync using its default state file (no `--state`): `health` reads the cursor only from that default path, `$XDG_STATE_HOME/<name>-books/mercury-<env>-<target>.sqlite3`. If sync keeps its state anywhere else, the `event cursor age` check finds nothing, reports `N/A`, and the run can pass while sync has stopped. For background on the checks, see the [health reference](../reference/health.md); for why closed quarters are rebuilt, see [what a close guarantees](../explanation/what-a-close-guarantees.md).
 
 ## Before you start
 
