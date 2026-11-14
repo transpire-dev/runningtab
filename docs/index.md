@@ -2,32 +2,36 @@
 
 runningtab is an open-source Python command-line tool that keeps your company’s books in ERPNext. It is available on PyPI under the Apache-2.0 license.
 
-## Why automate your books early?
+The written chart of accounts is why runningtab exists. You keep the chart in git, with explanations of what accounts are for and how to choose between them. Read [Why a written chart matters](explanation/why-a-written-chart.mdNone) first.
 
-Start automating your bookkeeping while the company is small, and you make fewer mistakes as it grows. Books kept accurately from the start also show you how the company works: where the money goes and what each software choice costs, early enough to tell whether the business is going to work.
+## Why automate early?
 
-Machines draft; humans post. The bot credential can prepare entries, but the server refuses any submission from it that commits money. A person posts every entry.
+Start automating bookkeeping while the company is small, and you make fewer mistakes as it grows. Accurate books also show you how the company works: where the money goes and what each software choice costs. You get that information early enough to judge whether the business is going to work.
 
-## What it automates
+## How it works
 
-- **Chart of accounts.** You keep `chart.coa` as a versioned text file in a books directory in git. `coa plan` shows proposed ERPNext changes; `coa apply` makes them. The same chart produces Mercury’s GL-code list and custom categories, an annotated chart document, and a QuickBooks Online import kit for your accountant.
+You keep a books directory in git. ERPNext holds the ledger, Mercury supplies bank activity and receipts, and a Cloud Storage record bucket retains closed-quarter records. Machines draft; humans post. ERPNext refuses the bot’s attempts to submit entries that commit money. Every command that touches the ledger requires `--target test` for a disposable site or `--target books` for the real ledger.
 
-- **Bank transactions.** `mercury sync` brings every settled Mercury transaction and its uploaded receipts into ERPNext for you to reconcile. It drafts a matching journal entry when Mercury coding or the payee’s history identifies an account. Transfers between your own accounts get one drafted voucher.
+The recurring work is to sync the bank, reconcile transactions, check health, and close each quarter into a retained record.
 
-- **Quarter close.** `period close` cross-checks the books against ERPNext’s reports, locks the quarter, and stores a checksummed package: trial balance, general ledger, statements, bank reconciliation, receipts, a QuickBooks import kit, and a plain-language MANIFEST. An accountant who has never worked with you can read it. `period status` rebuilds every closed quarter and reports differences from the stored packages.
+## Early software
 
-- **Health checks.** `runningtab health` reports failures that can otherwise stay silent: bank transactions that no longer sum to the balance, transactions uncoded at Mercury for more than 14 days, money in suspense, bank ingest more than 7 days behind, and closed quarters that no longer match their stored packages.
-
-- **Cash forecast.** `forecast` calculates how much each member must contribute to keep cash above a floor through the end of the third full month ahead. This fits a company funded by its members, such as an LLC.
+runningtab is at version 0.1.0, a pre-release. The Mercury webhook receiver is not built yet.
 
 ## What you need
 
-You need Python 3.14, an ERPNext site plus a disposable test site for practice, a Mercury account, and Google Cloud Secret Manager and Cloud Storage. Secret Manager holds credentials; Cloud Storage holds closed-quarter records. Secret Manager is the current credential backend and may become pluggable.
+You need Python 3.14, an ERPNext site and a disposable test site, a Mercury account, Google Cloud Secret Manager for credentials, and Cloud Storage for records.
 
-Install with `pip install --pre runningtab` or `uv add --prerelease allow runningtab`.
+Install with:
 
-## Where to go next
+```sh
+pip install --pre runningtab
+```
 
-Start with [Your chart in a test ledger](tutorial.md). The tutorial needs only an ERPNext test site.
+## Read next
 
-Then read [How it works](explanation/how-it-works.md) for the overall workflow. Use the [chart command reference](reference/coa.md) for command details and [targets and credentials](reference/targets-and-credentials.md) for connection settings.
+- [Tutorial: your chart in a test ledger](tutorial.md)
+- [Why write the chart down](explanation/why-a-written-chart.md)
+- [How it works](explanation/how-it-works.md)
+- How-to: [set up a site](how-to/set-up.md), [daily operations](how-to/daily.md), [close a quarter](how-to/close-a-quarter.md)
+- Reference: [the books directory](reference/books-directory.md), and `runningtab <command> --help` for every command
