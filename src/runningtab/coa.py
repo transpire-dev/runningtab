@@ -1,4 +1,4 @@
-"""What `runningtab coa` does between the prompts: plan, apply, prune, park.
+"""What `runningtab coa` does between the prompts: plan, apply, prune, park, clear the stock chart.
 
 Everything here returns data or raises a typed error; `runningtab.cli` prints and
 picks exit codes. The rules that matter: a refused chart plan is never
@@ -9,6 +9,7 @@ to `--allow-unapplied`.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 
 from icedcoffee_sync.apply.diff import ChartPlan, Refusal, RefusalReason, diff
@@ -19,6 +20,9 @@ from icedcoffee_sync.apply.prune import PrunePlan, PruneRefusal, PruneReport, ex
 from icedcoffee_sync.erpnext.accounts import accounts_with_entries, company_abbr, document_name, read_chart
 from icedcoffee_sync.erpnext.company import clear_defaults_pointing_at, require_default_fields, set_default_accounts
 from icedcoffee_sync.frappe.client import Client, SiteConfig
+from icedcoffee_sync.frappe.errors import ChildExistsError, LinkExistsError, ValidationError
+
+from runningtab.stock_chart import STANDARD_CHART_PARENTS
 
 # Prune only touches extras, so a chart refusal blocks it only when it could
 # make the extras set wrong: ROOT_NOT_UNIQUE breaks the tree walk and
@@ -210,3 +214,133 @@ def prune_confirmed(context: Context, prune_plan: PrunePlan, *, allow_unapplied:
             context.client, extras, report, prune_plan.refusals, context.live, frozenset(context.by_number)
         )
     return PruneOutcome(cleared_defaults=cleared, report=report, parking=parking)
+
+
+# ERPNext declining to delete this one account, the same classes `prune`
+# treats as a refusal. Anything else -- a rate limit, a 5xx, a dropped
+# connection -- says nothing about the account and stops the run.
+STOCK_DELETE_REFUSALS: tuple[type[Exception], ...] = (LinkExistsError, ValidationError, ChildExistsError)
+
+
+class LedgerNotEmptyError(RuntimeError):
+    """The company's ledger holds entries, so the stock chart is real history and stays."""
+
+
+@dataclasses.dataclass(frozen=True)
+class StockClearPlan:
+    """Which of ERPNext's stock accounts `coa clear-stock` deletes, children before parents, and which it keeps."""
+
+    deletes: tuple[LiveAccount, ...]
+    kept: tuple[tuple[LiveAccount, str], ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class StockClearOutcome:
+    """What a stock-chart clear did."""
+
+    cleared_defaults: list[str]
+    deleted: list[str]
+    failed: list[tuple[str, str]]
+
+
+def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
+    """The stock-chart accounts on the site, deepest first; a stock group holding anything else is kept.
+
+    An account is the stock chart's when it has no account number (the
+    chart's own accounts always carry one), is not a root, its name and its
+    parent's name are a pair in ERPNext's Standard template, and that parent
+    is itself a root or the stock chart's -- so a stock name under one of our
+    numbered accounts is never taken for ERPNext's.
+    """
+    by_name = {a.document_name: a for a in live}
+    children: dict[str, list[LiveAccount]] = {}
+    for account in live:
+        if account.parent_document_name:
+            children.setdefault(account.parent_document_name, []).append(account)
+
+    def is_stock(account: LiveAccount) -> bool:
+        parent = by_name.get(account.parent_document_name or "")
+        if parent is None or account.number or STANDARD_CHART_PARENTS.get(account.name) != parent.name:
+            return False
+        return parent.parent_document_name is None or is_stock(parent)
+
+    def depth(account: LiveAccount) -> int:
+        level, parent = 0, account.parent_document_name
+        while parent and parent in by_name:
+            level, parent = level + 1, by_name[parent].parent_document_name
+        return level
+
+    def only_stock_below(account: LiveAccount) -> bool:
+        return all(is_stock(child) and only_stock_below(child) for child in children.get(account.document_name, []))
+
+    candidates = [a for a in live if is_stock(a)]
+    deletes = [a for a in candidates if only_stock_below(a)]
+    kept = [(a, "holds accounts outside ERPNext's stock chart") for a in candidates if not only_stock_below(a)]
+    deletes.sort(key=lambda a: (-depth(a), a.document_name))
+    kept.sort(key=lambda pair: pair[0].document_name)
+    return StockClearPlan(deletes=tuple(deletes), kept=tuple(kept))
+
+
+def ledger_is_empty(client: Client, company: str) -> bool:
+    """Whether the company has no GL Entry at all, submitted or cancelled."""
+    return not client.list("GL Entry", fields=["name"], filters=[["company", "=", company]], limit=1)
+
+
+def _restore_defaults_if_still_there(client: Client, company: str, fields: list[str], name: str) -> None:
+    """After a delete failed for a reason other than a refusal, point the cleared defaults back if the account survived.
+
+    Best effort while another error is already on its way up: a site that
+    just dropped a connection may drop this one too, and that error must
+    not replace the one that says what happened.
+    """
+    if not fields:
+        return
+    with contextlib.suppress(Exception):
+        if client.list("Account", fields=["name"], filters=[["name", "=", name]], limit=1):
+            client.update("Company", company, dict.fromkeys(fields, name))
+
+
+def clear_stock_confirmed(client: Client, company: str, plan: StockClearPlan) -> StockClearOutcome:
+    """Delete a confirmed plan's accounts, each after pointing Company's defaults away from it.
+
+    The ledger is probed again here, after the prompt, so an entry posted
+    while the prompt sat open still stops the run before anything changes.
+    ERPNext refuses to delete an account a Company default names, so each
+    account's defaults are cleared just before its delete and put back if
+    the delete is refused: a refused account keeps its defaults. A refused
+    delete is recorded and the run goes on; an account whose child is still
+    standing is not attempted, since ERPNext would refuse it too. Any other
+    error (a rate limit, a server error, a dropped connection) puts that
+    account's defaults back where it can and stops the run.
+
+    Raises:
+        LedgerNotEmptyError: The company has a GL Entry.
+    """
+    if not ledger_is_empty(client, company):
+        raise LedgerNotEmptyError(f"{company} has entries in its ledger; the stock chart is real history now")
+    cleared: list[str] = []
+    deleted: list[str] = []
+    failed: list[tuple[str, str]] = []
+    standing: set[str] = set()
+    for account in plan.deletes:
+        name = account.document_name
+        if name in standing:
+            failed.append((name, "a child account could not be deleted"))
+        else:
+            fields = clear_defaults_pointing_at(client, company, frozenset({name}))
+            try:
+                client.delete("Account", name)
+            except STOCK_DELETE_REFUSALS as error:
+                if fields:
+                    client.update("Company", company, dict.fromkeys(fields, name))
+                failed.append((name, str(error)))
+            except Exception:
+                _restore_defaults_if_still_there(client, company, fields, name)
+                raise
+            else:
+                cleared.extend(fields)
+                deleted.append(name)
+                continue
+        if account.parent_document_name:
+            standing.add(account.parent_document_name)
+    return StockClearOutcome(cleared_defaults=sorted(cleared), deleted=deleted, failed=failed)

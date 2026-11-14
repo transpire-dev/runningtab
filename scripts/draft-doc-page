@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Draft one documentation page with Astra (Codex CLI, model gpt-6-astra).
+#
+# Use it when writing prose for docs/: Astra writes well, and is not trusted
+# for facts. Write a brief (the reader, the page's job, the style rules, and
+# every source fact inline), run this, then check each claim in the draft
+# against the code before it goes into docs/. Astra runs read-only and cannot
+# edit the repo.
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+Usage: scripts/draft-doc-page BRIEF.md OUT.md
+
+Sends BRIEF.md to Astra (codex exec --model gpt-6-astra, read-only, ephemeral)
+and writes its answer to OUT.md. Codex's own log goes to OUT.md.log; this
+prints only the outcome, so read OUT.md (and the log if it failed).
+
+Environment:
+  DRAFT_MODEL   model to use (default: gpt-6-astra)
+USAGE
+}
+
+case "${1:-}" in
+    -h|--help) usage; exit 0 ;;
+esac
+if [ $# -ne 2 ]; then
+    echo "draft-doc-page: expected BRIEF.md and OUT.md, got $# argument(s)" >&2
+    usage >&2
+    exit 2
+fi
+brief=$1 out=$2
+if [ ! -f "$brief" ]; then
+    echo "draft-doc-page: no brief at $brief" >&2
+    exit 2
+fi
+if ! command -v codex >/dev/null; then
+    echo "draft-doc-page: codex is not on PATH; install the Codex CLI" >&2
+    exit 2
+fi
+
+repo=$(cd "$(dirname "$0")/.." && pwd)
+if codex exec --model "${DRAFT_MODEL:-gpt-6-astra}" -s read-only --ephemeral -C "$repo" -o "$out" - <"$brief" >"$out.log" 2>&1; then
+    echo "drafted $out ($(wc -w <"$out" | tr -d ' ') words)"
+else
+    status=$?
+    echo "draft-doc-page: codex exited $status; see $out.log" >&2
+    tail -5 "$out.log" >&2
+    exit "$status"
+fi

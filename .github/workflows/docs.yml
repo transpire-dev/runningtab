@@ -1,0 +1,50 @@
+name: Docs
+
+# Builds the documentation site on every pull request, so a broken link or
+# other build warning fails the PR, and publishes main to GitHub Pages
+# (https://transpire-dev.github.io/runningtab/). The repository's Pages source
+# must be set to "GitHub Actions".
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push waits rather than cancelling a deploy
+# already under way.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # `just docs-build` asks for a GIL-enabled 3.14, which uv cannot download
+      # by that name; installing the regular 3.14 first gives it one to find.
+      - run: uv python install 3.14
+      - run: uvx --from rust-just just docs-build
+      - if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
