@@ -19,7 +19,7 @@ from typer.testing import CliRunner
 from runningtab import coa
 from runningtab.chart import load_chart, load_defaults
 from runningtab.cli import _Context, app
-from runningtab.stock_chart import STANDARD_CHART_ACCOUNT_NAMES
+from runningtab.stock_chart import STANDARD_CHART_ACCOUNT_NAMES, STANDARD_CHART_PARENTS
 from tests.conftest import EXAMPLE_BOOKS
 
 runner = CliRunner()
@@ -236,3 +236,17 @@ def test_cli_refuses_when_the_tree_changed_while_the_prompt_was_open(monkeypatch
     assert result.exit_code == 1
     assert "refusing to clear: the accounts changed since planning" in result.output
     assert [line for line in client.log if line.startswith(("delete", "update"))] == []
+
+
+def test_a_stock_name_under_a_parent_the_template_does_not_use_is_not_stock() -> None:
+    own_group = _live("Petty Funds", "Current Assets", is_group=True)
+    own_cash = _live("Cash", "Petty Funds")
+    plan = coa.plan_stock_clear([ROOT, CURRENT, own_group, own_cash])
+    assert [a.document_name for a in plan.deletes] == []
+    assert [a.document_name for a, _ in plan.kept] == ["Current Assets - VT"]
+
+
+def test_the_template_parents_are_erpnext_standard_chart() -> None:
+    assert STANDARD_CHART_PARENTS["Cash"] == "Cash In Hand"
+    assert STANDARD_CHART_PARENTS["Current Assets"] == "Application of Funds (Assets)"
+    assert set(STANDARD_CHART_PARENTS) == STANDARD_CHART_ACCOUNT_NAMES

@@ -102,7 +102,7 @@ Delete ERPNext's stock chart from a site whose ledger is empty, so `runningtab c
 
 ### Notes
 
-An account is part of the stock chart when it has no account number, is not a root, and carries a name from ERPNext's "Standard" template (copied into `runningtab.stock_chart` from ERPNext's source). Your chart's accounts always carry a number, so they are never candidates. Accounts are deleted children first; a stock group that holds any other account is kept and listed under `keep`.
+An account is part of the stock chart when it has no account number, is not a root, and its name and its parent's name are a pair in ERPNext's "Standard" template (copied into `runningtab.stock_chart` from ERPNext's source). A name alone is not enough: your own unnumbered "Cash" under a group of your own is left alone. Your chart's accounts always carry a number, so they are never candidates. Accounts are deleted children first; a stock group that holds any other account is kept and listed under `keep`.
 
 After the prompt, the command reads the site again and refuses if the accounts it would delete have changed, then probes the ledger again. Each account's Company default-account fields are cleared just before its delete and put back if ERPNext refuses it, so a refused account keeps its defaults. A refused delete is reported with ERPNext's reason, the run continues, and that account's parent groups are left standing.
 

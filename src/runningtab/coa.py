@@ -21,7 +21,7 @@ from icedcoffee_sync.erpnext.company import clear_defaults_pointing_at, require_
 from icedcoffee_sync.frappe.client import Client, SiteConfig
 from icedcoffee_sync.frappe.errors import FrappeError
 
-from runningtab.stock_chart import STANDARD_CHART_ACCOUNT_NAMES
+from runningtab.stock_chart import STANDARD_CHART_PARENTS
 
 # Prune only touches extras, so a chart refusal blocks it only when it could
 # make the extras set wrong: ROOT_NOT_UNIQUE breaks the tree walk and
@@ -236,19 +236,22 @@ class StockClearOutcome:
     failed: list[tuple[str, str]]
 
 
-def _is_stock(account: LiveAccount) -> bool:
-    # The chart's own accounts always carry a number, so a stock-chart name
-    # on an unnumbered, non-root account is ERPNext's and not ours.
-    return bool(account.parent_document_name) and not account.number and account.name in STANDARD_CHART_ACCOUNT_NAMES
-
-
 def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
-    """The stock-chart accounts on the site, deepest first; a stock group holding anything else is kept."""
+    """The stock-chart accounts on the site, deepest first; a stock group holding anything else is kept.
+
+    An account is the stock chart's when it has no account number (the
+    chart's own accounts always carry one), is not a root, and its name and
+    its parent's name are a pair in ERPNext's Standard template.
+    """
     by_name = {a.document_name: a for a in live}
     children: dict[str, list[LiveAccount]] = {}
     for account in live:
         if account.parent_document_name:
             children.setdefault(account.parent_document_name, []).append(account)
+
+    def is_stock(account: LiveAccount) -> bool:
+        parent = by_name.get(account.parent_document_name or "")
+        return parent is not None and not account.number and STANDARD_CHART_PARENTS.get(account.name) == parent.name
 
     def depth(account: LiveAccount) -> int:
         level, parent = 0, account.parent_document_name
@@ -257,9 +260,9 @@ def plan_stock_clear(live: list[LiveAccount]) -> StockClearPlan:
         return level
 
     def only_stock_below(account: LiveAccount) -> bool:
-        return all(_is_stock(child) and only_stock_below(child) for child in children.get(account.document_name, []))
+        return all(is_stock(child) and only_stock_below(child) for child in children.get(account.document_name, []))
 
-    candidates = [a for a in live if _is_stock(a)]
+    candidates = [a for a in live if is_stock(a)]
     deletes = [a for a in candidates if only_stock_below(a)]
     kept = [(a, "holds accounts outside ERPNext's stock chart") for a in candidates if not only_stock_below(a)]
     deletes.sort(key=lambda a: (-depth(a), a.document_name))
