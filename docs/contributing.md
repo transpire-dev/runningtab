@@ -4,9 +4,10 @@ This page covers changing [runningtab itself](https://github.com/transpire-dev/r
 
 ## Set up and run checks
 
-Use Python 3.14, `uv`, and `just`. Select a GIL-enabled Python before installing or testing:
+Use Python 3.14, `uv`, and `just`. Select a GIL-enabled Python before installing or testing. uv cannot download an interpreter by the name `3.14+gil`, so install the regular 3.14 first, as CI does:
 
 ```sh
+uv python install 3.14
 export UV_PYTHON=3.14+gil
 just install
 just check

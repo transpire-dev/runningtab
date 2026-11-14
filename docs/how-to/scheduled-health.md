@@ -62,10 +62,10 @@ For `--target test`, set `MERCURY_SANDBOX_TOKEN` to a token created inside the M
     Choose cron, a systemd timer, or a CI schedule. This cron entry runs daily at 06:00:
 
     ```cron
-    0 6 * * * runningtab health --target books
+    0 6 * * * runningtab --books /absolute/path/to/my-books health --target books
     ```
 
-    Ensure the scheduled environment can find `runningtab` and use the prerequisites above. Preserve the report for diagnosis and configure your alerting system to notify you when the command exits non-zero. The exit code is the alert signal; the cron entry supplies the schedule.
+    cron does not read your shell's environment, so name the books directory with `--books` (or set `RUNNINGTAB_BOOKS` in the crontab), and make sure the scheduled environment can find `runningtab` and has the prerequisites above. Preserve the report for diagnosis and configure your alerting system to notify you when the command exits non-zero. The exit code is the alert signal; the cron entry supplies the schedule.
 
 ## If something goes wrong
 
