@@ -274,7 +274,7 @@ def test_a_delete_that_fails_in_transport_puts_the_defaults_back_and_raises() ->
     def delete(doctype: str, name: str) -> None:
         raise _TransportError("connection reset")
 
-    client.delete = delete  # ty: ignore[invalid-assignment]
+    client.delete = delete
     client.accounts = {"Cash - VT"}
     with pytest.raises(_TransportError):
         coa.clear_stock_confirmed(client, "VT", coa.plan_stock_clear([ROOT, CURRENT, CASH_GROUP, CASH]))  # ty: ignore[invalid-argument-type]
