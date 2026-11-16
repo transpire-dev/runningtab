@@ -63,7 +63,7 @@ Lines beginning with `>` add notes to the preceding account. Consecutive note li
 
 A single `[defaults]` block comes last. Entries use `field = number`, with unquoted account numbers referencing existing postable accounts. All fields shown in the [example chart](https://github.com/transpire-dev/runningtab/blob/main/examples/books/chart.coa) are required; additional fields are refused. The chart also requires postable Expense account `5299` for suspense.
 
-See [Why a written chart](../explanation/why-a-written-chart.mdNone).
+See [Why a written chart](../explanation/why-a-written-chart.md).
 
 ## `mercury.toml`
 

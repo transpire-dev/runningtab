@@ -2,7 +2,7 @@
 
 runningtab is an open-source Python command-line tool that keeps your company’s books in ERPNext. It is available on PyPI under the Apache-2.0 license.
 
-The written chart of accounts is why runningtab exists. You keep the chart in git, with explanations of what accounts are for and how to choose between them. Read [Why a written chart matters](explanation/why-a-written-chart.mdNone) first.
+The written chart of accounts is why runningtab exists. You keep the chart in git, with explanations of what accounts are for and how to choose between them. Read [Why a written chart matters](explanation/why-a-written-chart.md) first.
 
 ## Why automate early?
 
