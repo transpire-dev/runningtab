@@ -112,6 +112,32 @@ def test_invocation_problems_name_what_the_cli_rejects() -> None:
     ]
 
 
+_LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+
+
+def broken_links(page: Path, docs: Path = DOCS) -> list[str]:
+    """Relative link targets on a page that name no file."""
+    problems: list[str] = []
+    for target in _LINK_TARGET.findall(page.read_text()):
+        if "://" in target or target.startswith(("#", "mailto:")):
+            continue
+        path = target.split("#", 1)[0]
+        if not (page.parent / path).resolve().is_file():
+            problems.append(f"{page.relative_to(docs)}: {target}")
+    return problems
+
+
+def test_broken_links_names_a_target_with_no_page(tmp_path: Path) -> None:
+    page = tmp_path / "page.md"
+    (tmp_path / "other.md").write_text("")
+    page.write_text("[ok](other.md#part) [web](https://example.com) [bad](other.mdNone)")
+    assert broken_links(page, tmp_path) == ["page.md: other.mdNone"]
+
+
+def test_every_relative_link_on_every_page_names_a_page() -> None:
+    assert [problem for page in sorted(DOCS.rglob("*.md")) for problem in broken_links(page)] == []
+
+
 def test_every_invocation_on_every_page_is_one_the_cli_accepts() -> None:
     pages = sorted(DOCS.rglob("*.md"))
     problems = [

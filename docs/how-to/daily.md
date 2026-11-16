@@ -1,6 +1,6 @@
 # Daily operations
 
-Run this routine after completing [setup](set-up.mdNone). Have access to Mercury for coding transactions and to ERPNext for reviewing, submitting, matching, creating, and deleting vouchers. Run sync as often as you want the ledger current.
+Run this routine after completing [setup](set-up.md). Have access to Mercury for coding transactions and to ERPNext for reviewing, submitting, matching, creating, and deleting vouchers. Run sync as often as you want the ledger current.
 
 ## Sync Mercury
 
@@ -18,7 +18,7 @@ Sync exits `1` whenever it wants a person, even when posting work completed. Rea
 - `uncoded`: Settled, non-transfer rows without a GL code, with their age in days.
 - `delete`: Obsolete draft proposals, each linked for review and deletion.
 - `ATTENTION`: Rows requiring a decision, with the reason.
-- `closed`: Rows dated in a closed quarter; they receive no draft voucher and need the quarter reopened. See [Close a quarter](close-a-quarter.mdNone).
+- `closed`: Rows dated in a closed quarter; they receive no draft voucher and need the quarter reopened. See [Close a quarter](close-a-quarter.md).
 - `balance`: Each account’s summed settled transactions compared with Mercury’s `currentBalance`; investigate differences.
 
 Use `runningtab <command> --help` for command options.
@@ -68,7 +68,7 @@ The cursor check needs sync’s default state path: run health on the same machi
 
 ## Forecast capital
 
-Update `forecast.toml` in your [books directory](../reference/books-directory.mdNone), then review:
+Update `forecast.toml` in your [books directory](../reference/books-directory.md), then review:
 
 ```sh
 runningtab forecast plan --env production --target books

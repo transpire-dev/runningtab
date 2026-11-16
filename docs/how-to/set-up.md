@@ -4,7 +4,7 @@ Prepare a disposable ERPNext site with `--target test` first, then repeat on `--
 
 ## Books and credentials
 
-Copy [`examples/books/`](https://github.com/transpire-dev/runningtab/tree/main/examples/books) into your own [books directory](../reference/books-directory.mdNone). Configure `books.toml`, `chart.coa`, and `mercury.toml`, including the bot role and user. Set `RUNNINGTAB_BOOKS` to the directory’s path.
+Copy [`examples/books/`](https://github.com/transpire-dev/runningtab/tree/main/examples/books) into your own [books directory](../reference/books-directory.md). Configure `books.toml`, `chart.coa`, and `mercury.toml`, including the bot role and user. Set `RUNNINGTAB_BOOKS` to the directory’s path.
 
 Allowlist the disposable site’s host in `site.test_hosts`; keep `site.host` for your real ledger. Map every Mercury account, including the card, in `[accounts]` and `[bank_accounts]`. Bank Account names must follow `<account name> - Mercury`.
 
@@ -108,7 +108,7 @@ runningtab mercury snapshot --env production --target books --dry-run
 runningtab mercury snapshot --env production --target books
 ```
 
-Continue with [daily reconciliation](daily.mdNone).
+Continue with [daily reconciliation](daily.md).
 
 ## Rotating a key
 

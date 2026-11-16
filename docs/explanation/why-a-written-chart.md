@@ -32,7 +32,7 @@ An account name can only say so much. The annotated chart document explains what
 
 You edit the document’s prose directly. `chart render-doc` regenerates the account tables, keeping the reference connected to the file that drives the systems. You can consult the explanations while doing the books and check the tables against their source.
 
-`chart render-doc --check` checks whether the generated content is current. It writes nothing and reports a diff when that content is stale. For command details, use `runningtab chart render-doc --help`. See [Books directory](../reference/books-directory.mdNone) for the files that hold the chart and its documentation.
+`chart render-doc --check` checks whether the generated content is current. It writes nothing and reports a diff when that content is stale. For command details, use `runningtab chart render-doc --help`. See [Books directory](../reference/books-directory.md) for the files that hold the chart and its documentation.
 
 ## Reuse the vocabulary
 
@@ -48,7 +48,7 @@ Each system has its own requirements. Mercury’s GL-code importer requires comm
 
 The chart also records which accounts are reached only through period-end or adjustment journals. Mercury’s category management carries that decision through by offering no category for those accounts.
 
-These uses connect the chart to [daily bookkeeping](../how-to/daily.mdNone) and [closing a quarter](../how-to/close-a-quarter.mdNone).
+These uses connect the chart to [daily bookkeeping](../how-to/daily.md) and [closing a quarter](../how-to/close-a-quarter.md).
 
 ## Start changes in the chart
 
@@ -56,4 +56,4 @@ These uses connect the chart to [daily bookkeeping](../how-to/daily.mdNone) and 
 
 Before applying changes, runningtab validates the chart’s structure and account types. `coa plan` then shows how the chart differs from the ledger without writing anything. You can review both the written decision and its effect on the accounts before applying it.
 
-The work of defining your chart belongs to your company. Keeping it in a versioned file preserves that work as documentation you can review, explain, and carry between systems. To try the workflow, follow [Set up](../how-to/set-up.mdNone).
+The work of defining your chart belongs to your company. Keeping it in a versioned file preserves that work as documentation you can review, explain, and carry between systems. To try the workflow, follow [Set up](../how-to/set-up.md).
