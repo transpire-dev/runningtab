@@ -120,6 +120,7 @@ class Ledger(Protocol):
     draft carries live in a child table that no field list returns.
     """
 
+    def list(self, doctype: str, **kwargs: Any) -> Any: ...
     def iter_all(self, doctype: str, **kwargs: Any) -> Iterator[dict[str, Any]]: ...
     def get(self, doctype: str, name: str) -> Any: ...
     def insert(self, doctype: str, doc: dict[str, Any]) -> Any: ...
@@ -443,10 +444,18 @@ def plan_voucher(
     drafting one now would be clutter, and clutter this would then report as
     unneeded on every later run. A dry run plans the draft anyway, because a
     dry run has posted no Bank Transaction for this to find.
+
+    `lookups` was read when the pass began, and a person may have acted
+    since. So the two answers that lead to a write are asked again first: a
+    draft is only rewritten if the fresh copy -- read anyway to compare it --
+    is still an unsubmitted draft of ours, and a new draft is only inserted
+    if the row has not been reconciled in the meantime. Overwriting a
+    person's edit is the failure this module must never have; a stale answer
+    that only leads to doing nothing is left stale.
     """
     existing = lookups.voucher(transaction.id)
     if existing is None:
-        if lookups.reconciled(transaction.id):
+        if lookups.reconciled(transaction.id) or _reconciled_now(ledger, transaction.id):
             return Outcome.MATCHED, ""
         return Outcome.DRAFTED, ""
     name = str(existing["name"])
@@ -456,9 +465,25 @@ def plan_voucher(
         return Outcome.TAKEN_OVER, name
     if lookups.reconciled(transaction.id):
         return Outcome.UNNEEDED, name
-    if not differences(ledger.get(JOURNAL_ENTRY, name), doc):
+    current = ledger.get(JOURNAL_ENTRY, name)
+    if int(current.get("docstatus") or 0) != 0:
+        return Outcome.COMMITTED, name
+    if _text(current.get("modified_by")) != bot_user:
+        return Outcome.TAKEN_OVER, name
+    if not differences(current, doc):
         return Outcome.UNCHANGED, name
     return Outcome.UPDATED, name
+
+
+def _reconciled_now(ledger: Ledger, transaction_id: str) -> bool:
+    """Whether this transaction's Bank Transaction is reconciled, asked of the ledger rather than `Lookups`."""
+    rows = ledger.list(
+        BANK_TRANSACTION,
+        fields=["name", "status"],
+        filters=[[TRANSACTION_ID_FIELD, "=", transaction_id]],
+        limit=1,
+    )
+    return bool(rows) and str(rows[0].get("status") or "") == RECONCILED
 
 
 def _record(

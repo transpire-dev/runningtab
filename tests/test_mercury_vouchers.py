@@ -787,6 +787,43 @@ def test_a_draft_a_person_edited_is_left_alone_and_not_reported(posting_ctx, led
     assert site.documents[(JOURNAL_ENTRY, name)]["remark"] == "reviewed, this is the ISP not hosting"
 
 
+def test_a_draft_a_person_takes_over_after_the_pass_began_is_still_theirs(posting_ctx, ledger, site) -> None:
+    # The pass decides from rows it read when it began. A person editing the
+    # draft after that must not have their edit overwritten by a pass that
+    # still remembers the draft as ours.
+    draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
+    lookups = Lookups(ledger)
+    site.documents[(JOURNAL_ENTRY, name)]["modified_by"] = "pat@example.com"
+    recoded = coded("5110 - Cloud Hosting")
+    doc = journal_entry(recoded, "5110", posting_ctx)
+
+    assert plan_voucher(ledger, lookups, recoded, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.TAKEN_OVER, name)
+
+
+def test_a_draft_a_person_submits_after_the_pass_began_is_left_alone(posting_ctx, ledger, site) -> None:
+    draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
+    lookups = Lookups(ledger)
+    site.documents[(JOURNAL_ENTRY, name)]["docstatus"] = 1
+    recoded = coded("5110 - Cloud Hosting")
+    doc = journal_entry(recoded, "5110", posting_ctx)
+
+    assert plan_voucher(ledger, lookups, recoded, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.COMMITTED, name)
+
+
+def test_a_row_reconciled_after_the_pass_began_gets_no_draft(posting_ctx, ledger, site) -> None:
+    # A draft beside a row the person has just matched is clutter they would
+    # have to delete, so the pass asks again before it inserts one.
+    site.documents[("Bank Transaction", "BT-1")] = {TRANSACTION_ID_FIELD: CODED, "status": "Unreconciled"}
+    lookups = Lookups(ledger)
+    site.documents[("Bank Transaction", "BT-1")]["status"] = "Reconciled"
+    transaction = coded(EXPENSE_CODE)
+    doc = journal_entry(transaction, "5215", posting_ctx)
+
+    assert plan_voucher(ledger, lookups, transaction, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.MATCHED, "")
+
+
 def test_a_submitted_voucher_is_left_alone_and_not_reported(posting_ctx, ledger, site) -> None:
     draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
     name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
