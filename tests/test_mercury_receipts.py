@@ -431,8 +431,15 @@ def test_the_pass_reads_the_rows_and_their_files_once_however_many_carry_receipt
     attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
     attach_receipts([by_id(all_transactions())[RECEIPT_ROW]] * 3, ledger, fetcher=fetcher)
 
-    reads = [r.url.path.split("/")[-1].replace("%20", " ") for r in site.requests if r.method == "GET"]
-    assert reads == ["Bank Transaction", "File", "Bank Transaction", "File"]
+    gets = [r for r in site.requests if r.method == "GET"]
+    assert [r.url.path.split("/")[-1].replace("%20", " ") for r in gets] == [
+        "Bank Transaction",
+        "File",
+        "Bank Transaction",
+        "File",
+    ]
+    # Offset paging on a sort that holds still; see `posting.PAGE_ORDER`.
+    assert {r.url.params.get("order_by") for r in gets} == {"name asc"}
     assert len(uploads(site)) == 1
 
 

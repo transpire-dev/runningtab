@@ -39,6 +39,7 @@ from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLim
 from runningtab.mercury.models import Attachment, Transaction
 from runningtab.mercury.posting import (
     BANK_TRANSACTION,
+    PAGE_ORDER,
     Ledger,
     LedgerRows,
     PostingError,
@@ -213,6 +214,7 @@ def receipts_by_row(ledger: Ledger) -> dict[str, dict[str, str]]:
         FILE,
         fields=["name", "file_name", "attached_to_name"],
         filters=[["attached_to_doctype", "=", BANK_TRANSACTION]],
+        order_by=PAGE_ORDER,
     ):
         identity = attachment_id_of(str(row.get("file_name") or ""))
         attached_to = row.get("attached_to_name")

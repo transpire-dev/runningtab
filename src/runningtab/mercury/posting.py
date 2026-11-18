@@ -298,6 +298,14 @@ def bank_transaction(transaction: Transaction, ctx: PostingContext) -> dict[str,
 _LOOKUP_FIELDS = ["name", "docstatus", *BANK_TRANSACTION_CONTENT, *MERCURY_FIELDS]
 
 
+# The sort every offset-paged read here asks for. Frappe's default is
+# `modified desc`, and a row someone edits while a read is paging moves to the
+# front, so the page boundary then skips one row and repeats another. A skipped
+# voucher is drafted twice; a skipped receipt is uploaded twice. A name never
+# changes, so ordering on it holds still.
+PAGE_ORDER = "name asc"
+
+
 class RowReader(Protocol):
     """All `LedgerRows` needs of a ledger: a paged list."""
 
@@ -326,7 +334,9 @@ class LedgerRows:
 
     def __init__(self, ledger: RowReader, doctype: str, fields: Iterable[str]) -> None:
         self._rows: dict[str, list[dict[str, Any]]] = {}
-        for row in ledger.iter_all(doctype, fields=list(dict.fromkeys([*fields, TRANSACTION_ID_FIELD]))):
+        for row in ledger.iter_all(
+            doctype, fields=list(dict.fromkeys([*fields, TRANSACTION_ID_FIELD])), order_by=PAGE_ORDER
+        ):
             transaction_id = row.get(TRANSACTION_ID_FIELD)
             if transaction_id:
                 self._rows.setdefault(str(transaction_id), []).append(row)
@@ -389,7 +399,7 @@ def posted_transaction_ids(ledger: Ledger) -> dict[str, str]:
     adopts it, and until then it is none of this module's business.
     """
     posted: dict[str, str] = {}
-    for row in ledger.iter_all(BANK_TRANSACTION, fields=["name", TRANSACTION_ID_FIELD]):
+    for row in ledger.iter_all(BANK_TRANSACTION, fields=["name", TRANSACTION_ID_FIELD], order_by=PAGE_ORDER):
         transaction_id = row.get(TRANSACTION_ID_FIELD)
         if transaction_id:
             posted[str(transaction_id)] = str(row.get("name", ""))

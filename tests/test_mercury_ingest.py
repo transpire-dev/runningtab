@@ -1149,6 +1149,20 @@ def test_a_quiet_sync_reads_the_posted_rows_once_per_sweep_however_many_there_ar
     assert len(_bank_transaction_reads(site)) == 2
 
 
+def test_every_paged_read_holds_its_order_still(mercury, ledger, site, posting_ctx, state) -> None:
+    # Offset paging over Frappe's default `modified desc` skips a row at a
+    # page boundary whenever someone edits one mid-read, and a skipped row
+    # here is a second draft voucher or an orphan nobody is told about. This
+    # fake does not reorder on edit, so what is checked is that the order was
+    # asked for.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    run_sync(mercury, ledger, posting_ctx, state, now=NOW)
+
+    paged = [r for r in site.requests if r.method == "GET" and "start" in r.url.params]
+    assert {r.url.path.split("/")[-1].replace("%20", " ") for r in paged} == {"Bank Transaction", "Journal Entry"}
+    assert {r.url.params.get("order_by") for r in paged} == {"name asc"}
+
+
 def test_the_sweep_names_a_transaction_with_two_rows_and_refreshes_the_rest(
     mercury, ledger, site, posting_ctx, state
 ) -> None:
