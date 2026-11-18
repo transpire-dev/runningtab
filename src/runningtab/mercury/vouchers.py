@@ -429,7 +429,13 @@ def differences(current: dict[str, Any], doc: dict[str, Any]) -> list[str]:
 
 
 def plan_voucher(
-    ledger: Ledger, lookups: Lookups, transaction: Transaction, doc: dict[str, Any], bot_user: str
+    ledger: Ledger,
+    lookups: Lookups,
+    transaction: Transaction,
+    doc: dict[str, Any],
+    bot_user: str,
+    *,
+    other_halves: Iterable[str] = (),
 ) -> tuple[Outcome, str]:
     """Decide what to do with one transaction's voucher, writing nothing.
 
@@ -446,33 +452,58 @@ def plan_voucher(
     dry run has posted no Bank Transaction for this to find.
 
     `lookups` was read when the pass began, and a person may have acted
-    since. So the two answers that lead to a write are asked again first: a
+    since. So the answers that lead to a write are asked again first: a
     draft is only rewritten if the fresh copy -- read anyway to compare it --
     is still an unsubmitted draft of ours, and a new draft is only inserted
-    if the row has not been reconciled in the meantime. Overwriting a
-    person's edit is the failure this module must never have; a stale answer
-    that only leads to doing nothing is left stale.
+    if no voucher has appeared for the row and neither it nor any of
+    `other_halves` (a transfer's incoming half) has been reconciled in the
+    meantime. Overwriting a person's edit, or booking what they have just
+    booked, is the failure this module must never have; a stale answer that
+    only leads to doing nothing is left stale.
     """
     existing = lookups.voucher(transaction.id)
     if existing is None:
-        if lookups.reconciled(transaction.id) or _reconciled_now(ledger, transaction.id):
-            return Outcome.MATCHED, ""
-        return Outcome.DRAFTED, ""
+        return _plan_new(ledger, lookups, transaction, other_halves)
     name = str(existing["name"])
-    if int(existing.get("docstatus") or 0) != 0:
-        return Outcome.COMMITTED, name
-    if _text(existing.get("modified_by")) != bot_user:
-        return Outcome.TAKEN_OVER, name
+    if (theirs := _theirs(existing, bot_user)) is not None:
+        return theirs, name
     if lookups.reconciled(transaction.id):
         return Outcome.UNNEEDED, name
     current = ledger.get(JOURNAL_ENTRY, name)
-    if int(current.get("docstatus") or 0) != 0:
-        return Outcome.COMMITTED, name
-    if _text(current.get("modified_by")) != bot_user:
-        return Outcome.TAKEN_OVER, name
+    if (theirs := _theirs(current, bot_user)) is not None:
+        return theirs, name
     if not differences(current, doc):
         return Outcome.UNCHANGED, name
     return Outcome.UPDATED, name
+
+
+def _theirs(voucher: dict[str, Any], bot_user: str) -> Outcome | None:
+    """Why this voucher is a person's rather than a draft of ours, or None when it is still ours."""
+    if int(voucher.get("docstatus") or 0) != 0:
+        return Outcome.COMMITTED
+    if _text(voucher.get("modified_by")) != bot_user:
+        return Outcome.TAKEN_OVER
+    return None
+
+
+def _plan_new(
+    ledger: Ledger, lookups: Lookups, transaction: Transaction, other_halves: Iterable[str]
+) -> tuple[Outcome, str]:
+    """Whether a row with no voucher in `lookups` gets a draft, asking the ledger again before saying yes."""
+    if lookups.reconciled(transaction.id):
+        return Outcome.MATCHED, ""
+    appeared = _vouchers_now(ledger, transaction.id)
+    if appeared:
+        # A person booked it while this pass ran: theirs, and not reported.
+        return Outcome.TAKEN_OVER, str(appeared[0].get("name", ""))
+    if any(_reconciled_now(ledger, half) for half in (transaction.id, *other_halves)):
+        return Outcome.MATCHED, ""
+    return Outcome.DRAFTED, ""
+
+
+def _vouchers_now(ledger: Ledger, transaction_id: str) -> list[dict[str, Any]]:
+    """The vouchers carrying this transaction's id, asked of the ledger rather than `Lookups`."""
+    return ledger.list(JOURNAL_ENTRY, fields=["name"], filters=[[TRANSACTION_ID_FIELD, "=", transaction_id]], limit=1)
 
 
 def _reconciled_now(ledger: Ledger, transaction_id: str) -> bool:
@@ -495,9 +526,10 @@ def _record(
     *,
     bot_user: str,
     dry_run: bool,
+    other_halves: Iterable[str] = (),
 ) -> None:
     """Carry out the plan for one transaction, or say what it would have been."""
-    outcome, name = plan_voucher(ledger, lookups, transaction, doc, bot_user)
+    outcome, name = plan_voucher(ledger, lookups, transaction, doc, bot_user, other_halves=other_halves)
     if outcome is Outcome.UNNEEDED:
         report.unneeded.append(Unneeded(transaction.id, str(name), "its Bank Transaction is reconciled"))
         return
@@ -560,6 +592,9 @@ class PayeeHistory:
                 continue
             name = str(existing["name"])
             voucher = self._ledger.get(JOURNAL_ENTRY, name)
+            if int(voucher.get("docstatus") or 0) != 1:
+                # Cancelled since `Lookups` read it: no longer a decision to copy.
+                continue
             bank = self._ctx.link(funding_account(transaction, self._ctx))
             others = {_text(row.get("account")) for row in voucher.get("accounts") or ()} - {bank}
             numbers = {self._numbers.get(account) for account in others}
@@ -750,7 +785,7 @@ def _draft_transfers(
         except PostingError as exc:
             report.attention.append((out.id, str(exc)))
             continue
-        _record(ledger, lookups, out, doc, report, bot_user=ctx.bot_user, dry_run=dry_run)
+        _record(ledger, lookups, out, doc, report, bot_user=ctx.bot_user, dry_run=dry_run, other_halves=(into.id,))
 
 
 def _report_closed_transfer(
