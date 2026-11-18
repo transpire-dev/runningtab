@@ -876,6 +876,27 @@ def test_a_voucher_cancelled_after_the_pass_began_is_no_precedent(posting_ctx, l
     assert report.drafted == []
 
 
+def test_a_draft_deleted_after_the_pass_began_does_not_end_the_run(posting_ctx, ledger, site) -> None:
+    # A person deleting our draft is their decision about the row; the pass
+    # leaves it, and the next run plans from its absence.
+    draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
+    site.after_reading[MID_PASS] = lambda site: site.documents.pop((JOURNAL_ENTRY, name))
+
+    report = draft_vouchers([coded("5110 - Cloud Hosting")], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+
+    assert (report.drafted, report.updated, report.attention) == ([], [], [])
+
+
+def test_a_precedent_deleted_after_the_pass_began_does_not_end_the_run(posting_ctx, ledger, site) -> None:
+    booked(site, posting_ctx, uncoded(EARLIER), "5215")
+    site.after_reading[MID_PASS] = lambda site: site.documents.pop((JOURNAL_ENTRY, f"JV-{EARLIER}"))
+
+    report = draft_vouchers([uncoded(EARLIER), uncoded(LATER)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+
+    assert report.drafted == []
+
+
 def test_a_draft_rewritten_by_another_run_after_the_pass_began_is_not_overwritten(posting_ctx, ledger, site) -> None:
     # Still ours by `modified_by` -- the bot wrote it -- so only the
     # compare-and-set on `modified` stops this run writing over the other's.

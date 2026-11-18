@@ -11,12 +11,13 @@ still goes through.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 from collections.abc import Iterator
 
 import pytest
 from icedcoffee_sync.frappe.client import Client
-from icedcoffee_sync.frappe.errors import TimestampMismatchError
+from icedcoffee_sync.frappe.errors import DoesNotExistError, TimestampMismatchError
 
 from runningtab.site import is_test_site
 from tests.conftest import live_books, require_live_target
@@ -64,7 +65,9 @@ def draft(client) -> Iterator[str]:
     )
     name = str(created["name"])
     yield name
-    client.delete("Journal Entry", name)
+    with contextlib.suppress(DoesNotExistError):
+        # Already gone when the test itself deleted it.
+        client.delete("Journal Entry", name)
 
 
 def _modified(client, name: str) -> str:
@@ -81,6 +84,14 @@ def test_a_write_carrying_a_stale_modified_is_refused_and_the_persons_edit_stand
         client.update("Journal Entry", draft, {"title": "live-stale-write: the sweep's", "modified": read_at_start})
 
     assert client.get("Journal Entry", draft)["title"] == "live-stale-write: a person's title"
+
+
+def test_reading_a_document_deleted_since_is_a_does_not_exist_error(client, draft) -> None:
+    # What the voucher pass catches when a person deletes a draft it read.
+    client.delete("Journal Entry", draft)
+
+    with pytest.raises(DoesNotExistError):
+        client.get("Journal Entry", draft)
 
 
 def test_a_write_carrying_the_current_modified_goes_through(client, draft) -> None:

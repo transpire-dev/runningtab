@@ -34,7 +34,7 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from icedcoffee_sync.apply.model import DesiredAccount
-from icedcoffee_sync.frappe.errors import TimestampMismatchError
+from icedcoffee_sync.frappe.errors import DoesNotExistError, TimestampMismatchError
 
 from runningtab.gl_codes import postable_accounts
 from runningtab.mercury.classify import classify, is_internal_transfer
@@ -471,7 +471,12 @@ def plan_voucher(
         return theirs, name
     if lookups.reconciled(transaction.id):
         return Outcome.UNNEEDED, name
-    current = ledger.get(JOURNAL_ENTRY, name)
+    try:
+        current = ledger.get(JOURNAL_ENTRY, name)
+    except DoesNotExistError:
+        # Deleted since the pass read it: a person's decision about the row,
+        # left alone. The next run plans from its absence.
+        return Outcome.TAKEN_OVER, name
     if (theirs := _theirs(current, bot_user)) is not None:
         return theirs, name
     if not differences(current, doc):
@@ -605,7 +610,11 @@ class PayeeHistory:
             if existing is None or int(existing.get("docstatus") or 0) != 1:
                 continue
             name = str(existing["name"])
-            voucher = self._ledger.get(JOURNAL_ENTRY, name)
+            try:
+                voucher = self._ledger.get(JOURNAL_ENTRY, name)
+            except DoesNotExistError:
+                # Deleted since `Lookups` read it.
+                continue
             if int(voucher.get("docstatus") or 0) != 1:
                 # Cancelled since `Lookups` read it: no longer a decision to copy.
                 continue

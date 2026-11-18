@@ -169,7 +169,9 @@ class _Site:
             # voucher path compares them.
             doc = self.documents.get((parts[-2], parts[-1]))
             if doc is None:
-                return httpx2.Response(404, json={"errors": [{"message": "not found"}]})
+                # Frappe's own answer for a missing document, as
+                # `test_live_stale_write.py` sees it from a live site.
+                return httpx2.Response(404, json={"errors": [{"type": "DoesNotExistError", "message": "not found"}]})
             return httpx2.Response(200, json={"data": {"name": parts[-1], **doc}})
         if request.method == "GET":
             return self._list(request, doctype)
