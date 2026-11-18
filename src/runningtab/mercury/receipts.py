@@ -34,7 +34,7 @@ import re
 from collections.abc import Iterable
 
 import httpx2
-from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError
+from icedcoffee_sync.frappe.errors import DoesNotExistError, FrappeError, PermissionError_, RateLimitError
 
 from runningtab.mercury.models import Attachment, Transaction
 from runningtab.mercury.posting import (
@@ -223,6 +223,34 @@ def receipts_by_row(ledger: Ledger) -> dict[str, dict[str, str]]:
     return by_row
 
 
+def _still_wanted(ledger: Ledger, row: str, identity: str, have: dict[str, str]) -> bool:
+    """Whether `row` still wants this receipt, asked of the ledger rather than the pass's read.
+
+    An upload is an insert, so it has no `modified` to make it a
+    compare-and-set the way an update has (`posting.as_read`). Asking again
+    is the next best thing, and only a receipt about to be uploaded pays for
+    it. A row cancelled or deleted since the pass read it takes nothing,
+    for the reason `attach_receipts` gives; a receipt that arrived since is
+    added to `have` so the pass does not try it again.
+    """
+    try:
+        current = ledger.get(BANK_TRANSACTION, row)
+    except DoesNotExistError:
+        return False
+    if int(current.get("docstatus") or 0) == 2:
+        return False
+    for file in ledger.iter_all(
+        FILE,
+        fields=["name", "file_name"],
+        filters=[["attached_to_doctype", "=", BANK_TRANSACTION], ["attached_to_name", "=", row]],
+        order_by=PAGE_ORDER,
+    ):
+        found = attachment_id_of(str(file.get("file_name") or ""))
+        if found is not None:
+            have[found] = str(file.get("name", ""))
+    return identity not in have
+
+
 def _attach(
     ledger: Ledger,
     transaction: Transaction,
@@ -254,6 +282,8 @@ def _attach(
     name = file_name_for(attachment, identity)
     if dry_run:
         report.planned.append(f"attach {name} to {BANK_TRANSACTION} {row} for {transaction.id}")
+        return
+    if not _still_wanted(ledger, row, identity, have):
         return
     try:
         content = fetcher.fetch(attachment.url)
