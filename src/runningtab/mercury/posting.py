@@ -38,7 +38,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -298,14 +298,66 @@ def bank_transaction(transaction: Transaction, ctx: PostingContext) -> dict[str,
 _LOOKUP_FIELDS = ["name", "docstatus", *BANK_TRANSACTION_CONTENT, *MERCURY_FIELDS]
 
 
+class RowReader(Protocol):
+    """All `LedgerRows` needs of a ledger: a paged list."""
+
+    def iter_all(self, doctype: str, **kwargs: Any) -> Iterator[dict[str, Any]]: ...
+
+
+class LedgerRows:
+    """Every document of one doctype that carries a Mercury transaction id, read once and found by that id.
+
+    The sweeps ask about every settled row on every run. Asking the ledger once
+    per row made a run a few hundred requests on books of eighty-odd rows, and
+    any one of them failing ended the run: on the production site two syncs in
+    four died that way, on a 500 and then a dropped connection, each in a
+    lookup the site would have answered a moment later. One paged read per
+    sweep gives the same answers in a handful of requests.
+
+    A snapshot, not a cache: it never sees what the sweep holding it writes.
+    That is safe because a sweep decides each transaction once, from what it
+    read before writing, and writes at most one document for it -- no sweep
+    reads back a row it wrote. Each sweep reads its own, so the next one sees
+    every write the last one made.
+
+    Paged and filtered here rather than on the server, for the reasons
+    `posted_transaction_ids` gives.
+    """
+
+    def __init__(self, ledger: RowReader, doctype: str, fields: Iterable[str]) -> None:
+        self._rows: dict[str, list[dict[str, Any]]] = {}
+        for row in ledger.iter_all(doctype, fields=list(dict.fromkeys([*fields, TRANSACTION_ID_FIELD]))):
+            transaction_id = row.get(TRANSACTION_ID_FIELD)
+            if transaction_id:
+                self._rows.setdefault(str(transaction_id), []).append(row)
+
+    def of(self, transaction_id: str) -> list[dict[str, Any]]:
+        """The documents carrying this transaction's id, in the order the ledger listed them."""
+        return list(self._rows.get(transaction_id, ()))
+
+
+def bank_transaction_rows(ledger: Ledger) -> LedgerRows:
+    """Every Bank Transaction carrying a Mercury id, with what `existing_in` needs to plan against it."""
+    return LedgerRows(ledger, BANK_TRANSACTION, _LOOKUP_FIELDS)
+
+
 def find_existing(ledger: Ledger, transaction_id: str) -> dict[str, Any] | None:
-    """The Bank Transaction already posted for a Mercury transaction, if there is one."""
+    """The Bank Transaction already posted for a Mercury transaction, if there is one, asked of the ledger."""
     rows = ledger.list(
         BANK_TRANSACTION,
         fields=_LOOKUP_FIELDS,
         filters=[[TRANSACTION_ID_FIELD, "=", transaction_id]],
         limit=2,
     )
+    return _the_one(transaction_id, rows)
+
+
+def existing_in(posted: LedgerRows, transaction_id: str) -> dict[str, Any] | None:
+    """The Bank Transaction already posted for a Mercury transaction, if there is one, found in rows read earlier."""
+    return _the_one(transaction_id, posted.of(transaction_id))
+
+
+def _the_one(transaction_id: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not rows:
         return None
     if len(rows) > 1:
@@ -413,8 +465,13 @@ def plan(
     transaction: Transaction,
     *,
     resource_version: int | None = None,
+    posted: LedgerRows | None = None,
 ) -> Plan:
     """Decide what `upsert` would do for this document, writing nothing.
+
+    `posted` is the Bank Transactions a sweep already read; without it the
+    ledger is asked about this one transaction. The event path asks, because
+    it inserts as it goes and a snapshot would not see its own rows.
 
     Never writes content to a document somebody has submitted. A change at
     Mercury to a transaction whose row a person already committed is not ours
@@ -445,7 +502,7 @@ def plan(
     body = {k: v for k, v in doc.items() if k != "doctype"}
     if resource_version is not None:
         body[RESOURCE_VERSION_FIELD] = resource_version
-    existing = find_existing(ledger, transaction_id)
+    existing = find_existing(ledger, transaction_id) if posted is None else existing_in(posted, transaction_id)
     if existing is None:
         return _plan_adoption(ledger, body, transaction)
     return _plan_amendment(existing, body, transaction)
@@ -535,8 +592,8 @@ def custom_field_documents() -> list[dict[str, Any]]:
     onto the amendment -- `no_copy` does not stop it -- while the cancelled
     original still holds it. Frappe's `unique` is a plain index that cannot
     exempt cancelled rows, so it refused that save and made every voucher of
-    ours uncorrectable. `runningtab.mercury.vouchers.find_existing` refuses a
-    second live voucher instead.
+    ours uncorrectable. `runningtab.mercury.vouchers.Lookups.voucher` refuses
+    a second live voucher instead.
 
     The GL code and note are writable, not read-only like the identity fields:
     a statement export imported by hand through Bank Statement Import maps its

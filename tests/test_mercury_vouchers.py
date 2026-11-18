@@ -29,6 +29,7 @@ from runningtab.mercury.vouchers import (
     JOURNAL_ENTRY,
     VOUCHER_TYPE,
     Chart,
+    Lookups,
     Outcome,
     coded_account,
     draft_vouchers,
@@ -905,16 +906,39 @@ def test_two_vouchers_for_one_transaction_refuse_rather_than_pick_one(posting_ct
     ledger.insert(JOURNAL_ENTRY, {TRANSACTION_ID_FIELD: CODED})
     with pytest.raises(PostingError, match="more than one live document"):
         plan_voucher(
-            ledger, coded(EXPENSE_CODE), journal_entry(coded(EXPENSE_CODE), "5215", posting_ctx), EXAMPLE_BOOKS.bot.user
+            ledger,
+            Lookups(ledger),
+            coded(EXPENSE_CODE),
+            journal_entry(coded(EXPENSE_CODE), "5215", posting_ctx),
+            EXAMPLE_BOOKS.bot.user,
         )
 
 
 def test_the_plan_names_what_it_would_do(posting_ctx, ledger) -> None:
     transaction = coded(EXPENSE_CODE)
     doc = journal_entry(transaction, "5215", posting_ctx)
-    assert plan_voucher(ledger, transaction, doc, EXAMPLE_BOOKS.bot.user)[0] is Outcome.DRAFTED
+    assert plan_voucher(ledger, Lookups(ledger), transaction, doc, EXAMPLE_BOOKS.bot.user)[0] is Outcome.DRAFTED
     draft_vouchers([transaction], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
-    assert plan_voucher(ledger, transaction, doc, EXAMPLE_BOOKS.bot.user)[0] is Outcome.UNCHANGED
+    assert plan_voucher(ledger, Lookups(ledger), transaction, doc, EXAMPLE_BOOKS.bot.user)[0] is Outcome.UNCHANGED
+
+
+def test_the_pass_reads_our_vouchers_and_the_bank_rows_once_however_many_rows_there_are(
+    posting_ctx, ledger, site
+) -> None:
+    # Two lookups per row made a run hundreds of requests, any one of which
+    # failing ended it. The whole-voucher reads that remain are one per draft
+    # of ours, to compare its accounts.
+    rows = [coded(EXPENSE_CODE), uncoded(EARLIER), uncoded(LATER)]
+    draft_vouchers(rows, posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    site.requests.clear()
+
+    draft_vouchers(rows, posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+
+    lists = [r.url.path.split("/")[-1].replace("%20", " ") for r in site.requests if r.method == "GET"]
+    assert [path for path in lists if path in {"Journal Entry", "Bank Transaction"}] == [
+        "Journal Entry",
+        "Bank Transaction",
+    ]
 
 
 # --- closed periods ------------------------------------------------------------

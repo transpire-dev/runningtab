@@ -1819,6 +1819,7 @@ def _print_report(report: IngestReport, site_url: str) -> None:
             typer.echo(f"  ! {transaction_id} {reason}")
     typer.echo(
         f"events    read {report.events_read} applied {report.events_applied} "
+        f"not-transaction {report.events_not_transactions} "
         f"deduplicated {report.events_deduplicated} out-of-order {report.events_out_of_order}"
     )
     typer.echo(f"cursor    {report.cursor}")

@@ -29,7 +29,7 @@ from runningtab.mercury.receipts import (
     attach_receipts,
     attachment_id_of,
     file_name_for,
-    receipts_on,
+    receipts_by_row,
 )
 from runningtab.mercury.state import IngestState
 from tests.conftest import all_transactions, by_id, payload
@@ -410,13 +410,30 @@ def test_a_dry_run_downloads_nothing_and_plans_the_line(
     assert uploads(site) == []
 
 
-def test_the_lookup_reads_only_the_files_on_that_row(ledger: Client, site: _Site, fetcher: ReceiptFetcher) -> None:
+def test_the_lookup_files_each_receipt_under_its_own_row(ledger: Client, site: _Site, fetcher: ReceiptFetcher) -> None:
     row = _post_row(ledger, RECEIPT_ROW)
     other = _post_row(ledger, "txn_deposit")
     attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
 
-    assert set(receipts_on(ledger, row)) == {RECEIPT_ID}
-    assert receipts_on(ledger, other) == {}
+    on_rows = receipts_by_row(ledger)
+    assert set(on_rows[row]) == {RECEIPT_ID}
+    assert other not in on_rows
+
+
+def test_the_pass_reads_the_rows_and_their_files_once_however_many_carry_receipts(
+    ledger: Client, site: _Site, fetcher: ReceiptFetcher
+) -> None:
+    # A lookup per row was a request per receipt-carrying row on every run,
+    # each one a chance for the site to end the whole run.
+    _post_row(ledger, RECEIPT_ROW)
+    site.requests.clear()
+
+    attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
+    attach_receipts([by_id(all_transactions())[RECEIPT_ROW]] * 3, ledger, fetcher=fetcher)
+
+    reads = [r.url.path.split("/")[-1].replace("%20", " ") for r in site.requests if r.method == "GET"]
+    assert reads == ["Bank Transaction", "File", "Bank Transaction", "File"]
+    assert len(uploads(site)) == 1
 
 
 # --- through a whole run ------------------------------------------------------
