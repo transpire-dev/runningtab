@@ -37,7 +37,7 @@ import datetime as dt
 from collections.abc import Iterable, Mapping
 from decimal import Decimal
 
-from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError
+from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError, TimestampMismatchError
 
 from runningtab.mercury.classify import Decision, Route, classify, is_internal_transfer
 from runningtab.mercury.client import MercuryClient
@@ -239,6 +239,13 @@ def _write(ledger: Ledger, verdict: Plan) -> tuple[Outcome, str]:
         # lost submit grant keep ending the run: both answer every write the
         # same way, and a line per row would bury the single real problem.
         raise
+    except TimestampMismatchError as exc:
+        # The plan's `as_read` guard: somebody saved the row after this run
+        # read it. Their version stands; the next run plans from it.
+        raise PostingError(
+            f"{verdict.doctype} {verdict.name} changed in the ledger after this run read it, so it was left as it "
+            "now is; the next run plans from the change"
+        ) from exc
     except FrappeError as exc:
         where = f" {verdict.name}" if verdict.name else ""
         # `.get` rather than `[...]`: an outcome nobody named a verb for is

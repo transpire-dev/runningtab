@@ -1181,6 +1181,25 @@ def test_the_sweep_names_a_transaction_with_two_rows_and_refreshes_the_rest(
     assert bank_rows(site)["txn_ach_utilities"]["mercury_gl_code"] == "5210 - Software & Subscriptions"
 
 
+def test_a_row_a_person_saves_mid_sweep_is_left_as_they_saved_it_and_said_so(
+    mercury, ledger, site, posting_ctx, state
+) -> None:
+    # The sweep plans from its one read. A person saving the row after that
+    # read wins: the server refuses the sweep's write, the run names the row,
+    # and the next run plans from what they saved.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    name = next(n for (doctype, n), doc in site.documents.items() if doc.get("mercury_transaction_id") == CODED_ROW)
+    site.after_reading["Bank Transaction"] = lambda site: site.edit_as_a_person(
+        "Bank Transaction", name, mercury_note="a person's own note"
+    )
+
+    with _mercury_for(_bank_that_recoded_the_utilities_ach()) as recoded:
+        report = run_sync(recoded, ledger, posting_ctx, state, now=NOW)
+
+    assert "changed in the ledger after this run read it" in dict(report.attention)[CODED_ROW]
+    assert site.documents[("Bank Transaction", name)]["mercury_note"] == "a person's own note"
+
+
 # --- the draft voucher beside a coded row ---------------------------------
 
 

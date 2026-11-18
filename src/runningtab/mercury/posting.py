@@ -294,8 +294,24 @@ def bank_transaction(transaction: Transaction, ctx: PostingContext) -> dict[str,
 
 
 # What a lookup reads back: enough to compare a submitted row's content with
-# Mercury's, and to see which Mercury fields are already on it.
-_LOOKUP_FIELDS = ["name", "docstatus", *BANK_TRANSACTION_CONTENT, *MERCURY_FIELDS]
+# Mercury's, to see which Mercury fields are already on it, and to write back
+# only if nobody has changed it since (`as_read`).
+_LOOKUP_FIELDS = ["name", "docstatus", "modified", *BANK_TRANSACTION_CONTENT, *MERCURY_FIELDS]
+
+
+def as_read(row: dict[str, Any]) -> dict[str, Any]:
+    """What makes an update to `row` apply only to the row as it was read.
+
+    Frappe refuses a save whose `modified` is not the stored one
+    (`Document.check_if_latest`), answering `TimestampMismatchError`; proved
+    against a live site in `test_live_stale_write.py`. Sending back the
+    `modified` a plan was made from turns every update into a compare-and-set,
+    so a person's edit made after the read -- however long after, whatever
+    the read was -- is refused rather than overwritten. A row read without
+    its `modified` gets no guard, and the update is unconditional.
+    """
+    modified = row.get("modified")
+    return {"modified": modified} if modified else {}
 
 
 # The sort every offset-paged read here asks for. Frappe's default is
@@ -482,9 +498,9 @@ def plan(
     `posted` is the Bank Transactions a sweep already read; without it the
     ledger is asked about this one transaction. The event path asks, because
     it inserts as it goes and a snapshot would not see its own rows. A sweep's
-    read may be stale by the time it reaches a row, so it is trusted only to
-    say there is nothing to do: any plan that would write is made again from
-    the ledger, because the person may have corrected the row since.
+    read may be stale by the time it reaches a row; every update carries the
+    `modified` it was planned from (`as_read`), so a row a person changed
+    since is refused by the server rather than overwritten.
 
     Never writes content to a document somebody has submitted. A change at
     Mercury to a transaction whose row a person already committed is not ours
@@ -515,11 +531,7 @@ def plan(
     body = {k: v for k, v in doc.items() if k != "doctype"}
     if resource_version is not None:
         body[RESOURCE_VERSION_FIELD] = resource_version
-    if posted is not None:
-        existing = existing_in(posted, transaction_id)
-        if existing is not None and _plan_amendment(existing, body, transaction).outcome is Outcome.UNCHANGED:
-            return Plan(Outcome.UNCHANGED, BANK_TRANSACTION, str(existing["name"]))
-    existing = find_existing(ledger, transaction_id)
+    existing = find_existing(ledger, transaction_id) if posted is None else existing_in(posted, transaction_id)
     if existing is None:
         return _plan_adoption(ledger, body, transaction)
     return _plan_amendment(existing, body, transaction)
@@ -544,7 +556,9 @@ def _plan_adoption(ledger: Ledger, body: dict[str, Any], transaction: Transactio
             "import and the next run adopts the survivor"
         )
     if matches:
-        return Plan(Outcome.ADOPTED, BANK_TRANSACTION, str(matches[0]["name"]), _mercury_fields(body))
+        return Plan(
+            Outcome.ADOPTED, BANK_TRANSACTION, str(matches[0]["name"]), {**_mercury_fields(body), **as_read(matches[0])}
+        )
     return Plan(Outcome.SUBMITTED, BANK_TRANSACTION, body=_submitted(body))
 
 
@@ -565,14 +579,14 @@ def _plan_amendment(existing: dict[str, Any], body: dict[str, Any], transaction:
         if docstatus != 0:
             reason = f"{_SUBMITTED}: Mercury now says otherwise about {'; '.join(disagreements)}"
             return Plan(Outcome.REFUSED, BANK_TRANSACTION, name, reason=reason)
-        return Plan(Outcome.UPDATED, BANK_TRANSACTION, name, body)
+        return Plan(Outcome.UPDATED, BANK_TRANSACTION, name, {**body, **as_read(existing)})
     if docstatus == 2:
         # Cancelled. Frappe accepts no write at all, `allow_on_submit` or not.
         return Plan(Outcome.REFUSED, BANK_TRANSACTION, name, reason=_SUBMITTED)
     changes = {k: v for k, v in _mercury_fields(body).items() if existing.get(k) != v}
     if not changes:
         return Plan(Outcome.UNCHANGED, BANK_TRANSACTION, name)
-    return Plan(Outcome.UPDATED, BANK_TRANSACTION, name, changes)
+    return Plan(Outcome.UPDATED, BANK_TRANSACTION, name, {**changes, **as_read(existing)})
 
 
 def carry_out(ledger: Ledger, verdict: Plan) -> tuple[Outcome, str]:

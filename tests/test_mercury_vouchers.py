@@ -836,68 +836,58 @@ def test_a_row_reconciled_after_the_pass_began_gets_no_draft(posting_ctx, ledger
     assert plan_voucher(ledger, lookups, transaction, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.MATCHED, "")
 
 
-class _SiteThatChangesMidPass(_Site):
-    """The stand-in ERPNext, applying `change` once just after the pass has read its rows.
-
-    `Lookups` reads Bank Transactions last, so the change lands after both of
-    its reads and before anything the pass writes -- the gap a person acting
-    during a run falls into.
-    """
-
-    def __init__(self, change: Any) -> None:
-        super().__init__()
-        self.change = change
-
-    def handler(self, request: httpx2.Request) -> httpx2.Response:
-        response = super().handler(request)
-        paged = request.method == "GET" and "start" in request.url.params
-        if paged and self.change and request.url.path.split("/")[-1].replace("%20", " ") == "Bank Transaction":
-            change, self.change = self.change, None
-            change(self)
-        return response
+# `Lookups` reads Bank Transactions last, so a change hooked onto that read
+# lands after both of the pass's reads and before anything it writes -- the
+# gap a person acting during a run falls into.
+MID_PASS = "Bank Transaction"
 
 
-def _draft_with_a_change_mid_pass(posting_ctx, transactions: list[Transaction], change: Any) -> tuple[Any, _Site]:
-    site = _SiteThatChangesMidPass(change)
-    with Client(SITE, transport=httpx2.MockTransport(site.handler)) as ledger:
-        report = draft_vouchers(transactions, posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
-    return report, site
-
-
-def test_a_voucher_a_person_books_after_the_pass_began_gets_no_second_draft(posting_ctx) -> None:
+def test_a_voucher_a_person_books_after_the_pass_began_gets_no_second_draft(posting_ctx, ledger, site) -> None:
     # The Mercury id is not unique on Journal Entry, so nothing on the server
     # would stop the duplicate.
     def books_it(site: _Site) -> None:
         site.documents[(JOURNAL_ENTRY, "JV-PAT")] = {TRANSACTION_ID_FIELD: CODED, "modified_by": "pat@example.com"}
 
-    report, site = _draft_with_a_change_mid_pass(posting_ctx, [coded(EXPENSE_CODE)], books_it)
+    site.after_reading[MID_PASS] = books_it
+    report = draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
 
     assert report.drafted == []
     assert [name for (doctype, name) in site.documents if doctype == JOURNAL_ENTRY] == ["JV-PAT"]
 
 
-def test_a_transfer_whose_incoming_half_is_matched_after_the_pass_began_gets_no_draft(posting_ctx) -> None:
-    report, site = _draft_with_a_change_mid_pass(
-        posting_ctx,
-        legs("txn_cc_payment", "txn_cc_payment_in"),
-        lambda site: reconciled(site, "txn_cc_payment_in"),
+def test_a_transfer_whose_incoming_half_is_matched_after_the_pass_began_gets_no_draft(
+    posting_ctx, ledger, site
+) -> None:
+    site.after_reading[MID_PASS] = lambda site: reconciled(site, "txn_cc_payment_in")
+    report = draft_vouchers(
+        legs("txn_cc_payment", "txn_cc_payment_in"), posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS
     )
 
     assert report.drafted == []
     assert vouchers_on(site) == []
 
 
-def test_a_voucher_cancelled_after_the_pass_began_is_no_precedent(posting_ctx) -> None:
+def test_a_voucher_cancelled_after_the_pass_began_is_no_precedent(posting_ctx, ledger, site) -> None:
     # History copies only what a person still stands behind.
-    def cancels(site: _Site) -> None:
-        site.documents[(JOURNAL_ENTRY, f"JV-{EARLIER}")]["docstatus"] = 2
-
-    site = _SiteThatChangesMidPass(cancels)
     booked(site, posting_ctx, uncoded(EARLIER), "5215")
-    with Client(SITE, transport=httpx2.MockTransport(site.handler)) as ledger:
-        report = draft_vouchers([uncoded(EARLIER), uncoded(LATER)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    site.after_reading[MID_PASS] = lambda site: site.edit_as_a_person(JOURNAL_ENTRY, f"JV-{EARLIER}", docstatus=2)
+    report = draft_vouchers([uncoded(EARLIER), uncoded(LATER)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
 
     assert report.drafted == []
+
+
+def test_a_draft_rewritten_by_another_run_after_the_pass_began_is_not_overwritten(posting_ctx, ledger, site) -> None:
+    # Still ours by `modified_by` -- the bot wrote it -- so only the
+    # compare-and-set on `modified` stops this run writing over the other's.
+    draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
+    site.after_reading[MID_PASS] = lambda site: site.edit_as_a_person(JOURNAL_ENTRY, name, remark="the other run's")
+
+    report = draft_vouchers([coded("5110 - Cloud Hosting")], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+
+    assert report.updated == []
+    assert "changed in the ledger after this run read it" in dict(report.attention)[CODED]
+    assert site.documents[(JOURNAL_ENTRY, name)]["remark"] == "the other run's"
 
 
 def test_a_submitted_voucher_is_left_alone_and_not_reported(posting_ctx, ledger, site) -> None:

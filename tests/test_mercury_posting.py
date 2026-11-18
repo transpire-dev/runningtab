@@ -16,6 +16,7 @@ from typing import Any
 import httpx2
 import pytest
 from icedcoffee_sync.frappe.client import Client, SiteConfig
+from icedcoffee_sync.frappe.errors import TimestampMismatchError
 from icedcoffee_sync.frappe.lifecycle import SubmitNotPermittedError
 
 from runningtab.mercury.classify import classify
@@ -32,6 +33,7 @@ from runningtab.mercury.posting import (
     bank_account_documents,
     bank_transaction,
     bank_transaction_rows,
+    carry_out,
     custom_field_documents,
     install_bank_accounts,
     install_custom_fields,
@@ -114,6 +116,23 @@ class _Site:
         # What the site says when asked to store a file, if anything. Set to a
         # (status, error type, message) triple to make the next upload fail.
         self.refuse_upload: tuple[int, str, str] | None = None
+        # Frappe stamps `modified` on every save and refuses an update whose
+        # `modified` is not the stored one (`Document.check_if_latest`, proved
+        # live in `test_live_stale_write.py`). A counter stands in for the
+        # clock: only equality matters.
+        self.saves = 0
+        # Something a person does while a run is underway, by doctype: applied
+        # once, right after the next paged read of that doctype -- the read a
+        # sweep plans from -- and before anything the sweep writes.
+        self.after_reading: dict[str, Any] = {}
+
+    def _stamp(self) -> str:
+        self.saves += 1
+        return f"2026-01-01 00:00:00.{self.saves:06}"
+
+    def edit_as_a_person(self, doctype: str, name: str, **fields: Any) -> None:
+        """A person saving the document in the desk: their fields, and a new `modified`."""
+        self.documents[(doctype, name)].update({**fields, "modified": self._stamp()})
 
     def _upload(self, request: httpx2.Request) -> httpx2.Response:
         """Frappe's `upload_file`: a `File` document, and the bytes behind it."""
@@ -153,24 +172,7 @@ class _Site:
                 return httpx2.Response(404, json={"errors": [{"message": "not found"}]})
             return httpx2.Response(200, json={"data": {"name": parts[-1], **doc}})
         if request.method == "GET":
-            filters = json.loads(request.url.params.get("filters", "[]"))
-            fields = json.loads(request.url.params.get("fields", '["name"]'))
-            wanted = {f[0]: f[2] for f in filters}
-            rows = []
-            for (dt_, name), doc in self.documents.items():
-                if dt_ != doctype or not all(doc.get(k) == v for k, v in wanted.items()):
-                    continue
-                row = {"name": name, "docstatus": doc.get("docstatus", 0)}
-                row.update({field: doc.get(field) for field in fields if field not in row})
-                rows.append(row)
-            # `limit` and `start` are honoured so a paging reader is actually
-            # paged here. Ignoring them would hand `iter_all` every row on its
-            # first request, and a caller that had forgotten to page would pass
-            # against this fake and truncate against a real site.
-            start = int(request.url.params.get("start", 0))
-            limit = request.url.params.get("limit")
-            page = rows[start:] if limit is None else rows[start : start + int(limit)]
-            return httpx2.Response(200, json={"data": page})
+            return self._list(request, doctype)
         if request.method == "POST":
             body = json.loads(request.content)
             self.counter += 1
@@ -179,15 +181,44 @@ class _Site:
                 **body,
                 "docstatus": body.get("docstatus", 0),
                 "modified_by": self.user,
+                "modified": self._stamp(),
             }
             return httpx2.Response(200, json={"data": {"name": name, **body}})
         if request.method == "PUT":
-            name = parts[-1]
-            doctype = parts[-2]
-            body = json.loads(request.content)
-            self.documents[(doctype, name)].update({**body, "modified_by": self.user})
-            return httpx2.Response(200, json={"data": {"name": name}})
+            return self._update(request, parts[-2], parts[-1])
         return httpx2.Response(405, json={"errors": [{"message": "no"}]})
+
+    def _list(self, request: httpx2.Request, doctype: str) -> httpx2.Response:
+        filters = json.loads(request.url.params.get("filters", "[]"))
+        fields = json.loads(request.url.params.get("fields", '["name"]'))
+        wanted = {f[0]: f[2] for f in filters}
+        rows = []
+        for (dt_, name), doc in self.documents.items():
+            if dt_ != doctype or not all(doc.get(k) == v for k, v in wanted.items()):
+                continue
+            row = {"name": name, "docstatus": doc.get("docstatus", 0)}
+            row.update({field: doc.get(field) for field in fields if field not in row})
+            rows.append(row)
+        # `limit` and `start` are honoured so a paging reader is actually
+        # paged here. Ignoring them would hand `iter_all` every row on its
+        # first request, and a caller that had forgotten to page would pass
+        # against this fake and truncate against a real site.
+        start = int(request.url.params.get("start", 0))
+        limit = request.url.params.get("limit")
+        page = rows[start:] if limit is None else rows[start : start + int(limit)]
+        response = httpx2.Response(200, json={"data": page})
+        if "start" in request.url.params and doctype in self.after_reading:
+            self.after_reading.pop(doctype)(self)
+        return response
+
+    def _update(self, request: httpx2.Request, doctype: str, name: str) -> httpx2.Response:
+        body = json.loads(request.content)
+        stored = self.documents[(doctype, name)]
+        if "modified" in body and body["modified"] != stored.get("modified"):
+            message = f"Error: {name} ({doctype}) has been modified after you have opened it"
+            return httpx2.Response(417, json={"errors": [{"type": "TimestampMismatchError", "message": message}]})
+        stored.update({**body, "modified_by": self.user, "modified": self._stamp()})
+        return httpx2.Response(200, json={"data": {"name": name}})
 
 
 @pytest.fixture
@@ -379,21 +410,25 @@ def test_a_row_whose_mercury_facts_are_unchanged_is_left_alone(ledger, site, pos
     assert len(_puts(site)) == 0
 
 
-def test_a_draft_a_person_corrects_after_the_sweep_read_it_is_planned_from_their_correction(
-    ledger, site, posting_ctx
-) -> None:
+def test_a_draft_a_person_corrects_after_the_sweep_read_it_keeps_their_correction(ledger, site, posting_ctx) -> None:
     # The sweep plans from rows it read when it began. Rewriting a draft from
     # that read would put Mercury's spelling over the correction a person
-    # made since.
+    # made since, so the write carries the `modified` it was planned from and
+    # the server refuses it.
     transaction = by_id(all_transactions())["txn_deposit"]
     doc = bank_transaction(transaction, posting_ctx)
     _, name = upsert(ledger, doc, transaction)
-    row = site.documents[("Bank Transaction", name)]
-    row.update({"docstatus": 0, "deposit": 1.0})
+    site.edit_as_a_person("Bank Transaction", name, docstatus=0, deposit=1.0)
     posted = bank_transaction_rows(ledger)
-    row.update({"deposit": doc["deposit"], "description": transaction.counterparty_name})
+    corrected = {"deposit": doc["deposit"], "description": transaction.counterparty_name}
+    site.edit_as_a_person("Bank Transaction", name, **corrected)
 
-    assert plan(ledger, doc, transaction, posted=posted).outcome is Outcome.UNCHANGED
+    verdict = plan(ledger, doc, transaction, posted=posted)
+    with pytest.raises(TimestampMismatchError):
+        carry_out(ledger, verdict)
+
+    row = site.documents[("Bank Transaction", name)]
+    assert {field: row[field] for field in corrected} == corrected
 
 
 def test_two_documents_for_one_transaction_stop_the_run(ledger, site, posting_ctx) -> None:
@@ -528,9 +563,11 @@ def test_a_later_note_change_updates_an_adopted_submitted_row(ledger, site, post
     name = _hand_imported(site, reference=TRACE)
     upsert(ledger, bank_transaction(transaction, posting_ctx), transaction, resource_version=1)
     noted = dataclasses.replace(transaction, note="From Gavin")
+    read = site.documents[("Bank Transaction", name)]["modified"]
     outcome, same = upsert(ledger, bank_transaction(noted, posting_ctx), noted, resource_version=2)
     assert (outcome, same) == (Outcome.UPDATED, name)
-    assert _puts(site)[-1] == {RESOURCE_VERSION_FIELD: 2, NOTE_FIELD: "From Gavin"}
+    # Only the changed Mercury fields, guarded by the row as it was read.
+    assert _puts(site)[-1] == {RESOURCE_VERSION_FIELD: 2, NOTE_FIELD: "From Gavin", "modified": read}
     row = site.documents[("Bank Transaction", name)]
     assert (row["docstatus"], row["withdrawal"], row["date"], row["description"]) == (1, 100.0, "2026-08-05", "Sonic")
 

@@ -34,6 +34,7 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from icedcoffee_sync.apply.model import DesiredAccount
+from icedcoffee_sync.frappe.errors import TimestampMismatchError
 
 from runningtab.gl_codes import postable_accounts
 from runningtab.mercury.classify import classify, is_internal_transfer
@@ -45,6 +46,7 @@ from runningtab.mercury.posting import (
     LedgerRows,
     PostingContext,
     PostingError,
+    as_read,
 )
 from runningtab.period.quarter import Quarter
 
@@ -363,7 +365,7 @@ class Lookups:
     """
 
     def __init__(self, ledger: Ledger) -> None:
-        self._vouchers = LedgerRows(ledger, JOURNAL_ENTRY, ["name", "docstatus", "modified_by"])
+        self._vouchers = LedgerRows(ledger, JOURNAL_ENTRY, ["name", "docstatus", "modified_by", "modified"])
         self._bank = LedgerRows(ledger, BANK_TRANSACTION, ["name", "status"])
 
     def voucher(self, transaction_id: str) -> dict[str, Any] | None:
@@ -546,7 +548,17 @@ def _record(
         if dry_run:
             report.planned.append(f"update {JOURNAL_ENTRY} {name} for {transaction.id}")
             return
-        ledger.update(JOURNAL_ENTRY, name, doc)
+        try:
+            # Planned from the pass's read, so written only if the draft is
+            # still as that read found it -- see `posting.as_read`.
+            ledger.update(JOURNAL_ENTRY, name, {**doc, **as_read(lookups.voucher(transaction.id) or {})})
+        except TimestampMismatchError:
+            report.attention.append((
+                transaction.id,
+                f"{JOURNAL_ENTRY} {name} changed in the ledger after this run read it, so it was left as it now "
+                "is; the next run plans from the change",
+            ))
+            return
         report.updated.append(name)
 
 
