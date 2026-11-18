@@ -474,6 +474,8 @@ def plan_voucher(
         return theirs, name
     if not differences(current, doc):
         return Outcome.UNCHANGED, name
+    if any(_reconciled_now(ledger, half) for half in (transaction.id, *other_halves)):
+        return Outcome.UNNEEDED, name
     return Outcome.UPDATED, name
 
 

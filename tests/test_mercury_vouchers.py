@@ -801,6 +801,18 @@ def test_a_draft_a_person_takes_over_after_the_pass_began_is_still_theirs(postin
     assert plan_voucher(ledger, lookups, recoded, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.TAKEN_OVER, name)
 
 
+def test_a_draft_of_ours_whose_row_is_matched_after_the_pass_began_is_not_rewritten(posting_ctx, ledger, site) -> None:
+    draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
+    name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)
+    site.documents[("Bank Transaction", "BT-1")] = {TRANSACTION_ID_FIELD: CODED, "status": "Unreconciled"}
+    lookups = Lookups(ledger)
+    site.documents[("Bank Transaction", "BT-1")]["status"] = "Reconciled"
+    recoded = coded("5110 - Cloud Hosting")
+    doc = journal_entry(recoded, "5110", posting_ctx)
+
+    assert plan_voucher(ledger, lookups, recoded, doc, EXAMPLE_BOOKS.bot.user) == (Outcome.UNNEEDED, name)
+
+
 def test_a_draft_a_person_submits_after_the_pass_began_is_left_alone(posting_ctx, ledger, site) -> None:
     draft_vouchers([coded(EXPENSE_CODE)], posting_ctx, ledger, own_account_ids=OWN_ACCOUNTS)
     name = next(n for (doctype, n) in site.documents if doctype == JOURNAL_ENTRY)

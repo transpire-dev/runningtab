@@ -481,7 +481,10 @@ def plan(
 
     `posted` is the Bank Transactions a sweep already read; without it the
     ledger is asked about this one transaction. The event path asks, because
-    it inserts as it goes and a snapshot would not see its own rows.
+    it inserts as it goes and a snapshot would not see its own rows. A sweep's
+    read may be stale by the time it reaches a row, so it is trusted only to
+    say there is nothing to do: any plan that would write is made again from
+    the ledger, because the person may have corrected the row since.
 
     Never writes content to a document somebody has submitted. A change at
     Mercury to a transaction whose row a person already committed is not ours
@@ -512,7 +515,11 @@ def plan(
     body = {k: v for k, v in doc.items() if k != "doctype"}
     if resource_version is not None:
         body[RESOURCE_VERSION_FIELD] = resource_version
-    existing = find_existing(ledger, transaction_id) if posted is None else existing_in(posted, transaction_id)
+    if posted is not None:
+        existing = existing_in(posted, transaction_id)
+        if existing is not None and _plan_amendment(existing, body, transaction).outcome is Outcome.UNCHANGED:
+            return Plan(Outcome.UNCHANGED, BANK_TRANSACTION, str(existing["name"]))
+    existing = find_existing(ledger, transaction_id)
     if existing is None:
         return _plan_adoption(ledger, body, transaction)
     return _plan_amendment(existing, body, transaction)

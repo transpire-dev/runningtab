@@ -31,6 +31,7 @@ from runningtab.mercury.posting import (
     PostingError,
     bank_account_documents,
     bank_transaction,
+    bank_transaction_rows,
     custom_field_documents,
     install_bank_accounts,
     install_custom_fields,
@@ -376,6 +377,23 @@ def test_a_row_whose_mercury_facts_are_unchanged_is_left_alone(ledger, site, pos
     outcome, _ = upsert(ledger, bank_transaction(transaction, posting_ctx), transaction, resource_version=1)
     assert outcome is Outcome.UNCHANGED
     assert len(_puts(site)) == 0
+
+
+def test_a_draft_a_person_corrects_after_the_sweep_read_it_is_planned_from_their_correction(
+    ledger, site, posting_ctx
+) -> None:
+    # The sweep plans from rows it read when it began. Rewriting a draft from
+    # that read would put Mercury's spelling over the correction a person
+    # made since.
+    transaction = by_id(all_transactions())["txn_deposit"]
+    doc = bank_transaction(transaction, posting_ctx)
+    _, name = upsert(ledger, doc, transaction)
+    row = site.documents[("Bank Transaction", name)]
+    row.update({"docstatus": 0, "deposit": 1.0})
+    posted = bank_transaction_rows(ledger)
+    row.update({"deposit": doc["deposit"], "description": transaction.counterparty_name})
+
+    assert plan(ledger, doc, transaction, posted=posted).outcome is Outcome.UNCHANGED
 
 
 def test_two_documents_for_one_transaction_stop_the_run(ledger, site, posting_ctx) -> None:
