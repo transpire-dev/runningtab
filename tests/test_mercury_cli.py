@@ -100,6 +100,16 @@ def test_the_report_counts_adopted_rows_apart_from_submitted_ones(capsys: pytest
     assert "created" not in output
 
 
+def test_the_report_accounts_for_every_event_it_read(capsys: pytest.CaptureFixture[str]) -> None:
+    # Read 36, applied 22, and nothing else on the line looked like 14 events
+    # had gone missing. They were events about something other than a
+    # transaction, which have nothing to post.
+    report = IngestReport(events_read=36, events_applied=22, events_not_transactions=14)
+    _print_report(report, SITE)
+    output = capsys.readouterr().out
+    assert "read 36 applied 22 not-transaction 14 deduplicated 0 out-of-order 0" in output
+
+
 def test_the_report_counts_draft_vouchers_apart_from_submitted_rows(capsys: pytest.CaptureFixture[str]) -> None:
     # A submitted Bank Transaction is the bank's record; a draft Journal Entry
     # is a proposal a person still has to submit. Counting them together would

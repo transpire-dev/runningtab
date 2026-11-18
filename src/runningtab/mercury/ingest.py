@@ -37,7 +37,7 @@ import datetime as dt
 from collections.abc import Iterable, Mapping
 from decimal import Decimal
 
-from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError
+from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError, TimestampMismatchError
 
 from runningtab.mercury.classify import Decision, Route, classify, is_internal_transfer
 from runningtab.mercury.client import MercuryClient
@@ -45,11 +45,13 @@ from runningtab.mercury.models import Event, Operation, Status, Transaction
 from runningtab.mercury.posting import (
     TRANSACTION_ID_FIELD,
     Ledger,
+    LedgerRows,
     Outcome,
     Plan,
     PostingContext,
     PostingError,
     bank_transaction,
+    bank_transaction_rows,
     carry_out,
     plain_message,
     plan,
@@ -138,6 +140,9 @@ class IngestReport:
     applied_transactions: set[str] = dataclasses.field(default_factory=set)
     events_read: int = 0
     events_applied: int = 0
+    # Events about something other than a transaction. Retired, with nothing
+    # to post, and counted so that read and applied disagreeing is explained.
+    events_not_transactions: int = 0
     events_deduplicated: int = 0
     events_out_of_order: int = 0
     cursor: str | None = None
@@ -234,6 +239,13 @@ def _write(ledger: Ledger, verdict: Plan) -> tuple[Outcome, str]:
         # lost submit grant keep ending the run: both answer every write the
         # same way, and a line per row would bury the single real problem.
         raise
+    except TimestampMismatchError as exc:
+        # The plan's `as_read` guard: somebody saved the row after this run
+        # read it. Their version stands; the next run plans from it.
+        raise PostingError(
+            f"{verdict.doctype} {verdict.name} changed in the ledger after this run read it, so it was left as it "
+            "now is; the next run plans from the change"
+        ) from exc
     except FrappeError as exc:
         where = f" {verdict.name}" if verdict.name else ""
         # `.get` rather than `[...]`: an outcome nobody named a verb for is
@@ -252,6 +264,7 @@ def _post(
     version: int | None,
     dry_run: bool,
     refresh_only: bool = False,
+    posted: LedgerRows | None = None,
 ) -> None:
     """Plan the write, then do it -- or, on a dry run, only say what it would have been.
 
@@ -269,7 +282,7 @@ def _post(
     """
     doc = bank_transaction(transaction, ctx)
     transaction_id = doc[TRANSACTION_ID_FIELD]
-    verdict = plan(ledger, doc, transaction, resource_version=version)
+    verdict = plan(ledger, doc, transaction, resource_version=version, posted=posted)
     if verdict.outcome is Outcome.REFUSED:
         report.attention.append((transaction_id, f"{doc['doctype']} {verdict.name} {verdict.reason}"))
         return
@@ -315,6 +328,7 @@ def apply_transaction(
     version: int | None = None,
     dry_run: bool = False,
     refresh_only: bool = False,
+    posted: LedgerRows | None = None,
 ) -> bool:
     """Post the one Bank Transaction this transaction should have, or record why it has none.
 
@@ -336,7 +350,16 @@ def apply_transaction(
         # only a re-snapshot would find it again.
         return not decision.retryable
     try:
-        _post(ledger, transaction, ctx, report, version=version, dry_run=dry_run, refresh_only=refresh_only)
+        _post(
+            ledger,
+            transaction,
+            ctx,
+            report,
+            version=version,
+            dry_run=dry_run,
+            refresh_only=refresh_only,
+            posted=posted,
+        )
     except PostingError as exc:
         # A transaction we cannot post is a report line, not the end of the run:
         # stalling on one unmapped account would leave every later transaction
@@ -456,6 +479,7 @@ def apply_event(
         report.events_deduplicated += 1
         return True
     if not event.is_transaction:
+        report.events_not_transactions += 1
         state.mark_seen(event.id, now)
         return True
     if event.resource_version is not None:
@@ -515,19 +539,19 @@ def sweep_hints(
     `version=None` throughout: a GL edit bumps no resource version at Mercury,
     and stamping one here would claim the log said something it did not.
 
-    O(rows) -- one ledger read per settled transaction per run, which at the
-    seventeen rows these books hold is nothing. If that ever matters, read the
-    posted rows once (`posted_transaction_ids` already pages the doctype),
-    widen it to carry the hint fields, and plan only the rows whose hints
-    differ.
+    Reads the posted rows once, after the event path has written, rather than
+    once per transaction -- see `LedgerRows`.
     """
+    posted = bank_transaction_rows(ledger)
     for transaction in transactions:
         if transaction.id in report.applied_transactions or not classify(transaction).posts:
             continue
         # The return value is the cursor's business and the sweep is not: it
         # reads the transaction list, not the log, so nothing it finds may move
         # or hold a cursor into the log.
-        apply_transaction(transaction, ctx, ledger, report, version=None, dry_run=dry_run, refresh_only=True)
+        apply_transaction(
+            transaction, ctx, ledger, report, version=None, dry_run=dry_run, refresh_only=True, posted=posted
+        )
 
 
 def propose_vouchers(

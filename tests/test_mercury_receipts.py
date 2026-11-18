@@ -29,7 +29,7 @@ from runningtab.mercury.receipts import (
     attach_receipts,
     attachment_id_of,
     file_name_for,
-    receipts_on,
+    receipts_by_row,
 )
 from runningtab.mercury.state import IngestState
 from tests.conftest import all_transactions, by_id, payload
@@ -410,13 +410,72 @@ def test_a_dry_run_downloads_nothing_and_plans_the_line(
     assert uploads(site) == []
 
 
-def test_the_lookup_reads_only_the_files_on_that_row(ledger: Client, site: _Site, fetcher: ReceiptFetcher) -> None:
+def test_the_lookup_files_each_receipt_under_its_own_row(ledger: Client, site: _Site, fetcher: ReceiptFetcher) -> None:
     row = _post_row(ledger, RECEIPT_ROW)
     other = _post_row(ledger, "txn_deposit")
     attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
 
-    assert set(receipts_on(ledger, row)) == {RECEIPT_ID}
-    assert receipts_on(ledger, other) == {}
+    on_rows = receipts_by_row(ledger)
+    assert set(on_rows[row]) == {RECEIPT_ID}
+    assert other not in on_rows
+
+
+def test_the_pass_reads_the_rows_and_their_files_once_however_many_carry_receipts(
+    ledger: Client, site: _Site, fetcher: ReceiptFetcher
+) -> None:
+    # A lookup per row was a request per receipt-carrying row on every run,
+    # each one a chance for the site to end the whole run.
+    _post_row(ledger, RECEIPT_ROW)
+    attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
+    site.requests.clear()
+
+    attach_receipts([by_id(all_transactions())[RECEIPT_ROW]] * 3, ledger, fetcher=fetcher)
+
+    gets = [r for r in site.requests if r.method == "GET"]
+    assert [r.url.path.split("/")[-1].replace("%20", " ") for r in gets] == ["Bank Transaction", "File"]
+    # Offset paging on a sort that holds still; see `posting.PAGE_ORDER`.
+    assert {r.url.params.get("order_by") for r in gets} == {"name asc"}
+    assert uploads(site) == []
+
+
+# The receipt pass reads Files last, so a change hooked onto that read lands
+# after both of its reads and before its first upload.
+MID_PASS = "File"
+
+
+def test_a_row_cancelled_after_the_pass_began_gets_no_receipt(
+    ledger: Client, site: _Site, fetcher: ReceiptFetcher
+) -> None:
+    # An upload is an insert, with no `modified` to guard it, so the pass asks
+    # about the row again before each one.
+    row = _post_row(ledger, RECEIPT_ROW)
+    site.after_reading[MID_PASS] = lambda site: site.edit_as_a_person(BANK_TRANSACTION, row, docstatus=2)
+
+    report = attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
+
+    assert (report.attached, report.attention) == ([], [])
+    assert uploads(site) == []
+
+
+def test_a_receipt_attached_after_the_pass_began_is_not_attached_twice(
+    ledger: Client, site: _Site, fetcher: ReceiptFetcher
+) -> None:
+    # Another run getting there first, say: its upload carries the same id.
+    row = _post_row(ledger, RECEIPT_ROW)
+
+    def attaches_it(site: _Site) -> None:
+        site.documents[("File", "FI-OTHER")] = {
+            "file_name": RECEIPT_FILE,
+            "attached_to_doctype": BANK_TRANSACTION,
+            "attached_to_name": row,
+        }
+
+    site.after_reading[MID_PASS] = attaches_it
+
+    report = attach_receipts([by_id(all_transactions())[RECEIPT_ROW]], ledger, fetcher=fetcher)
+
+    assert report.attached == []
+    assert uploads(site) == []
 
 
 # --- through a whole run ------------------------------------------------------

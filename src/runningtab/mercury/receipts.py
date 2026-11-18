@@ -34,10 +34,18 @@ import re
 from collections.abc import Iterable
 
 import httpx2
-from icedcoffee_sync.frappe.errors import FrappeError, PermissionError_, RateLimitError
+from icedcoffee_sync.frappe.errors import DoesNotExistError, FrappeError, PermissionError_, RateLimitError
 
 from runningtab.mercury.models import Attachment, Transaction
-from runningtab.mercury.posting import BANK_TRANSACTION, Ledger, PostingError, find_existing, plain_message
+from runningtab.mercury.posting import (
+    BANK_TRANSACTION,
+    PAGE_ORDER,
+    Ledger,
+    LedgerRows,
+    PostingError,
+    existing_in,
+    plain_message,
+)
 
 FILE = "File"
 
@@ -186,8 +194,12 @@ class ReceiptFetcher:
         return b"".join(chunks)
 
 
-def receipts_on(ledger: Ledger, name: str) -> dict[str, str]:
-    """The attachment UUIDs already on one Bank Transaction, mapped to their `File` names.
+def receipts_by_row(ledger: Ledger) -> dict[str, dict[str, str]]:
+    """For each Bank Transaction, the attachment UUIDs already on it, mapped to their `File` names.
+
+    One read for the whole pass rather than one per row; see
+    `runningtab.mercury.posting.LedgerRows`. The pass adds each upload to its
+    row's entry, so a receipt it attached is never attached twice in one run.
 
     Paged with `iter_all` rather than one capped `list`: a read cut short at a
     page limit looks exactly like "that receipt is not attached yet", which is
@@ -197,16 +209,46 @@ def receipts_on(ledger: Ledger, name: str) -> dict[str, str]:
     reported. Somebody attached it, or another integration did; it is not this
     module's business either way.
     """
-    have: dict[str, str] = {}
+    by_row: dict[str, dict[str, str]] = {}
     for row in ledger.iter_all(
         FILE,
-        fields=["name", "file_name"],
-        filters=[["attached_to_doctype", "=", BANK_TRANSACTION], ["attached_to_name", "=", name]],
+        fields=["name", "file_name", "attached_to_name"],
+        filters=[["attached_to_doctype", "=", BANK_TRANSACTION]],
+        order_by=PAGE_ORDER,
     ):
         identity = attachment_id_of(str(row.get("file_name") or ""))
-        if identity is not None:
-            have[identity] = str(row.get("name", ""))
-    return have
+        attached_to = row.get("attached_to_name")
+        if identity is not None and attached_to:
+            by_row.setdefault(str(attached_to), {})[identity] = str(row.get("name", ""))
+    return by_row
+
+
+def _still_wanted(ledger: Ledger, row: str, identity: str, have: dict[str, str]) -> bool:
+    """Whether `row` still wants this receipt, asked of the ledger rather than the pass's read.
+
+    An upload is an insert, so it has no `modified` to make it a
+    compare-and-set the way an update has (`posting.as_read`). Asking again
+    is the next best thing, and only a receipt about to be uploaded pays for
+    it. A row cancelled or deleted since the pass read it takes nothing,
+    for the reason `attach_receipts` gives; a receipt that arrived since is
+    added to `have` so the pass does not try it again.
+    """
+    try:
+        current = ledger.get(BANK_TRANSACTION, row)
+    except DoesNotExistError:
+        return False
+    if int(current.get("docstatus") or 0) == 2:
+        return False
+    for file in ledger.iter_all(
+        FILE,
+        fields=["name", "file_name"],
+        filters=[["attached_to_doctype", "=", BANK_TRANSACTION], ["attached_to_name", "=", row]],
+        order_by=PAGE_ORDER,
+    ):
+        found = attachment_id_of(str(file.get("file_name") or ""))
+        if found is not None:
+            have[found] = str(file.get("name", ""))
+    return identity not in have
 
 
 def _attach(
@@ -240,6 +282,8 @@ def _attach(
     name = file_name_for(attachment, identity)
     if dry_run:
         report.planned.append(f"attach {name} to {BANK_TRANSACTION} {row} for {transaction.id}")
+        return
+    if not _still_wanted(ledger, row, identity, have):
         return
     try:
         content = fetcher.fetch(attachment.url)
@@ -287,18 +331,21 @@ def attach_receipts(
     whatever replaces it is a new row, and the receipt lands there.
     """
     report = ReceiptReport()
+    transactions = [transaction for transaction in transactions if transaction.attachments]
+    if not transactions:
+        return report
+    posted = LedgerRows(ledger, BANK_TRANSACTION, ["name", "docstatus"])
+    on_rows = receipts_by_row(ledger)
     for transaction in transactions:
-        if not transaction.attachments:
-            continue
         try:
-            existing = find_existing(ledger, transaction.id)
+            existing = existing_in(posted, transaction.id)
         except PostingError as exc:
             report.attention.append((transaction.id, str(exc)))
             continue
         if existing is None or int(existing.get("docstatus") or 0) == 2:
             continue
         row = str(existing["name"])
-        have = receipts_on(ledger, row)
+        have = on_rows.setdefault(row, {})
         for attachment in transaction.attachments:
             _attach(ledger, transaction, attachment, row, have, report, fetcher=fetcher, dry_run=dry_run)
     return report

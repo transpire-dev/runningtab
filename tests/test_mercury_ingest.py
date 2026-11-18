@@ -512,6 +512,8 @@ def test_an_event_about_something_other_than_a_transaction_is_recorded_and_ignor
         report = run_sync(mercury, ledger, posting_ctx, state, now=NOW)
     assert report.events_read == 1
     assert report.events_applied == 0
+    # Counted apart, so read and applied disagreeing is never left unexplained.
+    assert report.events_not_transactions == 1
     assert state.has_seen("evt_0006")
 
 
@@ -1118,6 +1120,84 @@ def test_the_sweep_reports_a_settled_transaction_with_no_row_rather_than_posting
     assert {transaction_id for transaction_id, _ in report.attention} >= SETTLED
     assert "snapshot" in dict(report.attention)["txn_ach_utilities"]
     assert report.needs_attention
+
+
+def _bank_transaction_reads(site: _Site) -> list[httpx2.Request]:
+    """The list reads this run made of the Bank Transaction doctype."""
+    return [
+        r
+        for r in site.requests
+        if r.method == "GET" and r.url.path.split("/")[-1].replace("%20", " ") == "Bank Transaction"
+    ]
+
+
+def test_a_quiet_sync_reads_the_posted_rows_once_per_sweep_however_many_there_are(
+    mercury, ledger, site, posting_ctx, state
+) -> None:
+    # One lookup per settled row grew with the books, and every lookup was one
+    # more chance for the site to fail the whole run: on the production site
+    # two runs in four died in the sweep, on a 500 and then a dropped
+    # connection, taking the drafts, the receipts and the cursor with them.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    site.requests.clear()
+
+    report = run_sync(mercury, ledger, posting_ctx, state, now=NOW)
+
+    assert report.attention == []
+    # The hint sweep's read, then the voucher pass's. Each sweep reads its
+    # own so it sees what the one before it wrote.
+    assert len(_bank_transaction_reads(site)) == 2
+
+
+def test_every_paged_read_holds_its_order_still(mercury, ledger, site, posting_ctx, state) -> None:
+    # Offset paging over Frappe's default `modified desc` skips a row at a
+    # page boundary whenever someone edits one mid-read, and a skipped row
+    # here is a second draft voucher or an orphan nobody is told about. This
+    # fake does not reorder on edit, so what is checked is that the order was
+    # asked for.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    run_sync(mercury, ledger, posting_ctx, state, now=NOW)
+
+    paged = [r for r in site.requests if r.method == "GET" and "start" in r.url.params]
+    assert {r.url.path.split("/")[-1].replace("%20", " ") for r in paged} == {"Bank Transaction", "Journal Entry"}
+    assert {r.url.params.get("order_by") for r in paged} == {"name asc"}
+
+
+def test_the_sweep_names_a_transaction_with_two_rows_and_refreshes_the_rest(
+    mercury, ledger, site, posting_ctx, state
+) -> None:
+    # Reading every row at once must not turn one duplicate into the end of
+    # the sweep: the duplicate is a person's question about one transaction,
+    # and every other row's coding still has to arrive.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    site.documents[("Bank Transaction", "BT-9999")] = {**bank_rows(site)["txn_deposit"], "docstatus": 0}
+
+    with _mercury_for(_bank_that_recoded_the_utilities_ach()) as recoded:
+        report = run_sync(recoded, ledger, posting_ctx, state, now=NOW)
+
+    reason = dict(report.attention)["txn_deposit"]
+    assert "BT-9999" in reason
+    assert "install-fields" in reason
+    assert bank_rows(site)["txn_ach_utilities"]["mercury_gl_code"] == "5210 - Software & Subscriptions"
+
+
+def test_a_row_a_person_saves_mid_sweep_is_left_as_they_saved_it_and_said_so(
+    mercury, ledger, site, posting_ctx, state
+) -> None:
+    # The sweep plans from its one read. A person saving the row after that
+    # read wins: the server refuses the sweep's write, the run names the row,
+    # and the next run plans from what they saved.
+    run_snapshot(mercury, ledger, posting_ctx, state, now=NOW)
+    name = next(n for (doctype, n), doc in site.documents.items() if doc.get("mercury_transaction_id") == CODED_ROW)
+    site.after_reading["Bank Transaction"] = lambda site: site.edit_as_a_person(
+        "Bank Transaction", name, mercury_note="a person's own note"
+    )
+
+    with _mercury_for(_bank_that_recoded_the_utilities_ach()) as recoded:
+        report = run_sync(recoded, ledger, posting_ctx, state, now=NOW)
+
+    assert "changed in the ledger after this run read it" in dict(report.attention)[CODED_ROW]
+    assert site.documents[("Bank Transaction", name)]["mercury_note"] == "a person's own note"
 
 
 # --- the draft voucher beside a coded row ---------------------------------
